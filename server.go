@@ -117,7 +117,7 @@ func initProject() error {
 	return nil
 }
 
-func initConn() error {
+func initCliConn() error {
 	printSuccess("Resolving TCP Address...")
 	printWarn("Please type in the communication port")
 	fmt.Print("    ")
@@ -144,7 +144,7 @@ func main() {
 		printErr(err.Error())
 		os.Exit(1)
 	}
-	err = initConn()
+	err = initCliConn()
 	if err != nil {
 		printErr(err.Error())
 		os.Exit(1)
