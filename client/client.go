@@ -149,7 +149,7 @@ func buildCode(filename string) (string, error) {
 	if runtime.GOOS == "windows" {
 		flag = "/o"
 		output = "build.exe"
-		goexec, err = exec.LookPath("go")
+		goexec, err = exec.LookPath("go.exe")
 		if err != nil {
 			return "", err
 		}
