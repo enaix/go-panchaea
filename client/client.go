@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/fatih/color"
 	"net/rpc"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -114,19 +118,61 @@ func fetchCode(receive Receive, client *rpc.Client) (Reply, error) {
 	return reply, nil
 }
 
-func writeCode(code []byte, filename string) error {
+func writeCode(code []byte, filename string) (string, error) {
+	if _, err := os.Stat("build"); os.IsNotExist(err) {
+		err := os.Mkdir("build", 0755)
+		if err != nil {
+			printErr(err.Error())
+		}
+	}
+	filename = filepath.Join("build", filename)
 	f, err := os.Create(filename)
-	// TODO add project folder
 	if err != nil {
-		return err
+		return filename, err
 	}
 	defer f.Close()
 	_, err = f.Write(code)
 	if err != nil {
-		return err
+		return filename, err
 	}
 	printSuccess("Client code is written!")
-	return nil
+	return filename, nil
+}
+
+func buildCode(filename string) (string, error) {
+	flag := "-o"
+	output := "build"
+	goexec, err := exec.LookPath("go")
+	if err != nil {
+		return "", err
+	}
+	if runtime.GOOS == "windows" {
+		flag = "/o"
+		output = "build.exe"
+		goexec, err = exec.LookPath("go")
+		if err != nil {
+			return "", err
+		}
+	}
+	cmd := exec.Command(goexec, "build", flag, filepath.Join("build", output), filename)
+	fmt.Println(cmd)
+	file_out := filepath.Join("build", output)
+	var out, stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	printSuccess("Starting the build process...")
+	err = cmd.Run()
+	if out.String() != "" {
+		fmt.Println(out.String())
+	}
+	if stderr.String() != "" {
+		color.Red(stderr.String())
+	}
+	if err != nil {
+		return file_out, err
+	}
+	printSuccess("Build is complete!")
+	return file_out, nil
 }
 
 func connect(client *rpc.Client) (error, []byte, string, int) {
@@ -172,11 +218,13 @@ func main() {
 		printErr(err.Error())
 		os.Exit(1)
 	}
-	err = writeCode(bytecode, filename)
+	fname, err := writeCode(bytecode, filename)
 	if err != nil {
 		printErr(err.Error())
 		os.Exit(1)
 	}
+	out, err := buildCode(fname)
+	fmt.Println(out)
 	wg.Add(1)
 	go console(id)
 	wg.Wait()
