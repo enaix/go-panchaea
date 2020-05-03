@@ -18,12 +18,25 @@ var Clients []Client
 
 var ClientFile []byte
 
-type Client struct { // add Get function with try/catch
+type Client struct {
 	Id     int
 	Status string
 }
 
-type Reply struct { // add New function to init the struct
+func NewClient(id int, status string) {
+	Clients = append(Clients, Client{Id: id, Status: status})
+}
+
+func GetClient(id int) (*Client, bool) {
+	for i := range Clients {
+		if Clients[i].Id == id {
+			return &Clients[i], true
+		}
+	}
+	return nil, false
+}
+
+type Reply struct {
 	Data     string
 	Id       int
 	Bytecode []byte
@@ -74,10 +87,10 @@ func printWarn(s string) {
 func (l *Listener) Init(data Receive, reply *Reply) error {
 	if len(ClientFile) == 0 {
 		printErr("No client file provided")
-		*reply = Reply{"error", data.Id, nil}
+		*reply = Reply{Data: "error", Id: data.Id}
 		return errors.New("No input file provided")
 	}
-	*reply = Reply{"ok", data.Id, ClientFile}
+	*reply = Reply{Data: "ok", Id: data.Id, Bytecode: ClientFile}
 	return nil
 }
 
@@ -88,12 +101,18 @@ func (l *Listener) SendStatus(data Receive, reply *Reply) error {
 			id = len(Clients) + 1
 		}
 		printSuccess("Client " + strconv.Itoa(id) + " is connected")
-		Clients = append(Clients, Client{id, "connected"})
-		*reply = Reply{"ok", id, nil}
+		NewClient(id, "connected")
+		*reply = Reply{Data: "ok", Id: id}
 	} else if data.Status == "ready" {
 		printSuccess("Client " + strconv.Itoa(data.Id) + " is ready")
-		Clients[data.Id-1].Status = "ready" // TODO add client Get function call
-		*reply = Reply{"ok", data.Id, nil}
+		cl, ok := GetClient(data.Id)
+		if ok {
+			cl.Status = "ready"
+			*reply = Reply{Data: "ok", Id: data.Id}
+		} else {
+			printErr("[" + strconv.Itoa(data.Id) + "] " + "Client not found!")
+			*reply = Reply{Data: "client not found", Id: data.Id}
+		}
 	} else if data.Status == "error" {
 		printErr("[" + strconv.Itoa(data.Id) + "] " + data.Data)
 	}
