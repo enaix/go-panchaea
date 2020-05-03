@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/rpc"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 )
@@ -17,6 +18,8 @@ type Listener int
 var Clients []Client
 
 var ClientFile []byte
+
+var Filename string
 
 type Client struct {
 	Id     int
@@ -90,7 +93,7 @@ func (l *Listener) Init(data Receive, reply *Reply) error {
 		*reply = Reply{Data: "error", Id: data.Id}
 		return errors.New("No input file provided")
 	}
-	*reply = Reply{Data: "ok", Id: data.Id, Bytecode: ClientFile}
+	*reply = Reply{Data: Filename, Id: data.Id, Bytecode: ClientFile}
 	return nil
 }
 
@@ -120,18 +123,21 @@ func (l *Listener) SendStatus(data Receive, reply *Reply) error {
 }
 
 func initProject() error {
-	filename := ""
+	Filename = ""
 	printWarn("Please provide the client file")
 	fmt.Print("    ")
-	fmt.Scanln(&filename)
-	f, err := os.Open(filename)
+	fmt.Scanln(&Filename)
+	f, err := os.Open(Filename)
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 	ClientFile, err = ioutil.ReadAll(f)
 	if err != nil {
 		return err
 	}
+	_, file := filepath.Split(Filename)
+	Filename = file
 	printSuccess("File is succesfully loaded")
 	return nil
 }

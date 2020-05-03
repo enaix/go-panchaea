@@ -71,6 +71,7 @@ func console(id int) {
 		if cmd == "" {
 			continue
 		} else if cmd == "exit" {
+			// TODO add exit func
 			return
 		} else if cmd == "help" {
 			printWarn("This cli is not implemented")
@@ -113,11 +114,26 @@ func fetchCode(receive Receive, client *rpc.Client) (Reply, error) {
 	return reply, nil
 }
 
-func connect(client *rpc.Client) (error, []byte, int) {
+func writeCode(code []byte, filename string) error {
+	f, err := os.Create(filename)
+	// TODO add project folder
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(code)
+	if err != nil {
+		return err
+	}
+	printSuccess("Client code is written!")
+	return nil
+}
+
+func connect(client *rpc.Client) (error, []byte, string, int) {
 	var reply Reply
 	reply, err := sendStatus(Receive{"", "hello", -1}, client)
 	if err != nil {
-		return err, nil, -1
+		return err, nil, "", -1
 	}
 	if reply.Data == "ok" {
 		printSuccess("Connected! Your ID is " + strconv.Itoa(reply.Id))
@@ -127,7 +143,7 @@ func connect(client *rpc.Client) (error, []byte, int) {
 	id := reply.Id
 	reply, err = sendStatus(Receive{"", "ready", id}, client)
 	if err != nil {
-		return err, nil, id
+		return err, nil, "", id
 	}
 	if reply.Data != "ok" {
 		printErr(reply.Data)
@@ -135,15 +151,14 @@ func connect(client *rpc.Client) (error, []byte, int) {
 	printSuccess("Fetching client code...")
 	reply, err = fetchCode(Receive{"", "ready", id}, client)
 	if err != nil {
-		return err, nil, id
+		return err, nil, "", id
 	}
-	if reply.Data == "ok" {
-		printSuccess("Code is downloaded!")
+	if reply.Data == "error" {
+		printErr("Could not fetch the client file")
 	} else {
-		printErr(reply.Data)
+		printSuccess("Code is downloaded!")
 	}
-	return nil, reply.Bytecode, id
-
+	return nil, reply.Bytecode, reply.Data, id
 }
 
 func main() {
@@ -152,12 +167,16 @@ func main() {
 		printErr(err.Error())
 		os.Exit(1)
 	}
-	err, bytecode, id := connect(client)
+	err, bytecode, filename, id := connect(client)
 	if err != nil {
 		printErr(err.Error())
 		os.Exit(1)
 	}
-	fmt.Println(string(bytecode))
+	err = writeCode(bytecode, filename)
+	if err != nil {
+		printErr(err.Error())
+		os.Exit(1)
+	}
 	wg.Add(1)
 	go console(id)
 	wg.Wait()
