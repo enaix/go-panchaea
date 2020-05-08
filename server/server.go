@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"github.com/fatih/color"
@@ -8,9 +9,13 @@ import (
 	"net"
 	"net/rpc"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"plugin"
 	"regexp"
+	"runtime"
 	"strconv"
+	"reflect"
 )
 
 type Listener int
@@ -50,6 +55,15 @@ type Receive struct {
 	Status string
 	Id     int
 }
+
+type Server struct {
+	Current       int
+	PrepareAmount int
+	//        WorkUnits []*WorkUnit
+	Custom []byte
+}
+
+var serv Server
 
 func isFormatted(s string) bool {
 	re := regexp.MustCompile(`[\[]+(\w|\W)+[\]]+\s*\w*`)
@@ -94,6 +108,16 @@ func (l *Listener) Init(data Receive, reply *Reply) error {
 		return errors.New("No input file provided")
 	}
 	*reply = Reply{Data: Filename, Id: data.Id, Bytecode: ClientFile}
+	return nil
+}
+
+func (l *Listener) SendWorkUnit(data Receive, reply *Reply) error {
+	id := data.Id
+	wu, err := serv.Run(id)
+	if err != nil {
+		printErr(err)
+	}
+	*reply = Reply{Data: "ok", Id: id, Bytecode: wu}
 	return nil
 }
 
@@ -163,6 +187,70 @@ func initCliConn() error {
 	return nil
 }
 
+func buildServer(filename string) (string, error) {
+	flag := "-o"
+	output := "build"
+	goexec, err := exec.LookPath("go")
+	if err != nil {
+		return "", err
+	}
+	if runtime.GOOS == "windows" {
+		return "", errors.New("FATAL: Windows does not support Go Plugins!")
+	}
+	cmd := exec.Command(goexec, "build", flag, filepath.Join("build", output), "-buildmode=plugin", filename)
+	fmt.Println(cmd)
+	file_out := filepath.Join("build", output)
+	var out, stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	printSuccess("Starting the build process...")
+	err = cmd.Run()
+	if out.String() != "" {
+		fmt.Println(out.String())
+	}
+	if stderr.String() != "" {
+		color.Red(stderr.String())
+	}
+	if err != nil {
+		return file_out, err
+	}
+	printSuccess("Build is complete!")
+	return file_out, nil
+}
+
+func initClientServer() (*Server, error) {
+	filename := ""
+	printWarn("Please provide the client server file")
+	fmt.Print("    ")
+	fmt.Scanln(&filename)
+	out, err := buildServer(filename)
+	if err != nil {
+		return nil, err
+	}
+	plug, err := plugin.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	/* pkgServer, err := plug.Lookup("Server")
+	if err != nil {
+		return nil, err
+	}
+	serv, err := pkgServer.(Server)
+	var s serv
+	if err != nil {
+		return nil, error
+	}*/
+	run, err := plug.Lookup("Run")
+	if err != nil {
+		return nil, err
+	}
+	fn, err := run.(func(int)([]byte, error))
+	structType := reflect.ValueOf(fn).Type().Out(0)
+	fmt.Println(structType)
+	var s structType
+	return &s, nil
+}
+
 func main() {
 	err := initProject()
 	if err != nil {
@@ -174,4 +262,10 @@ func main() {
 		printErr(err.Error())
 		os.Exit(1)
 	}
+	s, err := initClientServer()
+	if err != nil {
+		printErr(err.Error())
+		os.Exit(1)
+	}
+	serv = s
 }
