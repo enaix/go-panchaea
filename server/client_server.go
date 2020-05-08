@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"encoding/json"
@@ -19,7 +19,7 @@ type WorkUnit struct {
 type Server struct {
 	Current       int // Current client
 	PrepareAmount int // Amount of WUs to be generated
-	//	WorkUnits []*WorkUnit // List of prepared WUs
+	WorkUnits []*WorkUnit // List of prepared WUs
 	Custom []byte // Custom server data, stored in JSON
 }
 
@@ -50,7 +50,11 @@ func (s *Server) Prepare(amount int) error {
 		return errors.New("No units to generate")
 	}
 	for i := 0; i < amount; i++ {
-		var wu = WorkUnit{Start: 100000 * (s.Current + i), End: 100000 + 100000*(s.Current+i)}
+		sign := 1
+		if i%2 != 0 {
+			sign = -1
+		}
+		var wu = WorkUnit{Start: 100000 * (s.Current + i), End: 100000 + 100000*(s.Current+i), Sign: sign}
 		s.WorkUnits = append(s.WorkUnits, &wu)
 	}
 	return nil
