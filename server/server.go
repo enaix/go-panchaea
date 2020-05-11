@@ -15,7 +15,10 @@ import (
 	"regexp"
 	"runtime"
 	"strconv"
+	"sync"
 )
+
+var wg sync.WaitGroup
 
 type Listener int
 
@@ -174,7 +177,7 @@ func initProject() error {
 	return nil
 }
 
-func initCliConn() error {
+func initCliConn() (*net.TCPListener, error) {
 	printSuccess("Resolving TCP Address...")
 	printWarn("Please type in the communication port")
 	fmt.Print("    ")
@@ -182,17 +185,23 @@ func initCliConn() error {
 	fmt.Scanln(&port)
 	address, err := net.ResolveTCPAddr("tcp", "127.0.0.1:"+port)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	in, err := net.ListenTCP("tcp", address)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	listener := new(Listener)
 	rpc.Register(listener)
-	printSuccess("Running...")
+	// printSuccess("Running...")
+	// rpc.Accept(in)
+	return in, nil
+}
+
+func processRPC(in *net.TCPListener) {
+	defer wg.Done()
+	printSuccess("Running..")
 	rpc.Accept(in)
-	return nil
 }
 
 func buildServer(filename string) (string, error) {
@@ -205,7 +214,7 @@ func buildServer(filename string) (string, error) {
 	if runtime.GOOS == "windows" {
 		return "", errors.New("FATAL: Windows does not support Go Plugins!")
 	}
-	cmd := exec.Command(goexec, "build", flag, filepath.Join("build", output), "-buildmode=\"plugin\"", filename)
+	cmd := exec.Command(goexec, "build", flag, filepath.Join("build", output), "-buildmode=plugin", filename)
 	fmt.Println(cmd)
 	file_out := filepath.Join("build", output)
 	var out, stderr bytes.Buffer
@@ -228,14 +237,14 @@ func buildServer(filename string) (string, error) {
 
 func initClientServer() (func() interface{}, error) {
 	filename := ""
-	printWarn("Please provide the client server file")
+	printWarn("Please provide the server file")
 	fmt.Print("    ")
 	fmt.Scanln(&filename)
-	_, err := buildServer(filename)
+	out, err := buildServer(filename)
 	if err != nil {
 		return nil, err
 	}
-	plug, err := plugin.Open(filename)
+	plug, err := plugin.Open(out)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +260,7 @@ func initPluginStruct(GetServer func() interface{}) error {
 	servInter := GetServer()
 	s, ok := servInter.(Server)
 	if !ok {
-		return errors.New("Could not receive server interface!")
+		return errors.New("Could not receive the server interface!")
 	}
 	s.Init()
 	return nil
@@ -263,7 +272,7 @@ func main() {
 		printErr(err.Error())
 		os.Exit(1)
 	}
-	err = initCliConn()
+	in, err := initCliConn()
 	if err != nil {
 		printErr(err.Error())
 		os.Exit(1)
@@ -278,4 +287,7 @@ func main() {
 		printErr(err.Error())
 		os.Exit(1)
 	}
+	wg.Add(1)
+	go processRPC(in)
+	wg.Wait()
 }
