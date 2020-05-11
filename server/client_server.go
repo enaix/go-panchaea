@@ -17,10 +17,10 @@ type WorkUnit struct {
 }
 
 type Server struct {
-	Current       int // Current client
-	PrepareAmount int // Amount of WUs to be generated
-	WorkUnits []*WorkUnit // List of prepared WUs
-	Custom []byte // Custom server data, stored in JSON
+	Current       int      // Current client
+	PrepareAmount int      // Amount of WUs to be generated
+	WorkUnits     [][]byte // List of prepared WUs, stored in JSON
+	Custom        []byte   // Custom server data, stored in JSON
 }
 
 func (s *Server) Init() {
@@ -36,13 +36,13 @@ func (s *Server) Run(id int) ([]byte, error) {
 		}
 	}
 	res := s.WorkUnits[0]
-	wu, err := json.Marshal(res)
+	/* wu, err := json.Marshal(res)
 	if err != nil {
 		return nil, err
-	}
+	}*/
 	s.WorkUnits = s.WorkUnits[1:]
 	s.Current++
-	return wu, nil
+	return res, nil
 }
 
 func (s *Server) Prepare(amount int) error {
@@ -55,7 +55,11 @@ func (s *Server) Prepare(amount int) error {
 			sign = -1
 		}
 		var wu = WorkUnit{Start: 100000 * (s.Current + i), End: 100000 + 100000*(s.Current+i), Sign: sign}
-		s.WorkUnits = append(s.WorkUnits, &wu)
+		wu_json, err := json.Marshal(wu)
+		if err != nil {
+			return err
+		}
+		s.WorkUnits = append(s.WorkUnits, wu_json)
 	}
 	return nil
 }
@@ -77,4 +81,8 @@ func (s *Server) Process(res [][]byte) error {
 	fmt.Println(sum)
 	// TODO add output to file
 	return nil
+}
+
+func GetServer() interface{} {
+	return &Server{}
 }

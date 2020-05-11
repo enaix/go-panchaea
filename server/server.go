@@ -15,7 +15,6 @@ import (
 	"regexp"
 	"runtime"
 	"strconv"
-	"reflect"
 )
 
 type Listener int
@@ -56,11 +55,20 @@ type Receive struct {
 	Id     int
 }
 
-type Server struct {
+/* type Server struct {
 	Current       int
 	PrepareAmount int
-	//        WorkUnits []*WorkUnit
+	WorkUnits [][]byte
 	Custom []byte
+}*/
+
+// var serv Server
+
+type Server interface {
+	Init()
+	Run(id int) ([]byte, error)
+	Prepare(amount int) error
+	Process(res [][]byte) error
 }
 
 var serv Server
@@ -115,7 +123,7 @@ func (l *Listener) SendWorkUnit(data Receive, reply *Reply) error {
 	id := data.Id
 	wu, err := serv.Run(id)
 	if err != nil {
-		printErr(err)
+		printErr(err.Error())
 	}
 	*reply = Reply{Data: "ok", Id: id, Bytecode: wu}
 	return nil
@@ -189,7 +197,7 @@ func initCliConn() error {
 
 func buildServer(filename string) (string, error) {
 	flag := "-o"
-	output := "build"
+	output := "build.so"
 	goexec, err := exec.LookPath("go")
 	if err != nil {
 		return "", err
@@ -197,7 +205,7 @@ func buildServer(filename string) (string, error) {
 	if runtime.GOOS == "windows" {
 		return "", errors.New("FATAL: Windows does not support Go Plugins!")
 	}
-	cmd := exec.Command(goexec, "build", flag, filepath.Join("build", output), "-buildmode=plugin", filename)
+	cmd := exec.Command(goexec, "build", flag, filepath.Join("build", output), "-buildmode=\"plugin\"", filename)
 	fmt.Println(cmd)
 	file_out := filepath.Join("build", output)
 	var out, stderr bytes.Buffer
@@ -218,12 +226,12 @@ func buildServer(filename string) (string, error) {
 	return file_out, nil
 }
 
-func initClientServer() (*Server, error) {
+func initClientServer() (func() interface{}, error) {
 	filename := ""
 	printWarn("Please provide the client server file")
 	fmt.Print("    ")
 	fmt.Scanln(&filename)
-	out, err := buildServer(filename)
+	_, err := buildServer(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -231,24 +239,22 @@ func initClientServer() (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	/* pkgServer, err := plug.Lookup("Server")
+	run, err := plug.Lookup("GetServer")
 	if err != nil {
 		return nil, err
 	}
-	serv, err := pkgServer.(Server)
-	var s serv
-	if err != nil {
-		return nil, error
-	}*/
-	run, err := plug.Lookup("Run")
-	if err != nil {
-		return nil, err
+	GetServer := run.(func() interface{})
+	return GetServer, nil
+}
+
+func initPluginStruct(GetServer func() interface{}) error {
+	servInter := GetServer()
+	s, ok := servInter.(Server)
+	if !ok {
+		return errors.New("Could not receive server interface!")
 	}
-	fn, err := run.(func(int)([]byte, error))
-	structType := reflect.ValueOf(fn).Type().Out(0)
-	fmt.Println(structType)
-	var s structType
-	return &s, nil
+	s.Init()
+	return nil
 }
 
 func main() {
@@ -262,10 +268,14 @@ func main() {
 		printErr(err.Error())
 		os.Exit(1)
 	}
-	s, err := initClientServer()
+	GetServer, err := initClientServer()
 	if err != nil {
 		printErr(err.Error())
 		os.Exit(1)
 	}
-	serv = s
+	err = initPluginStruct(GetServer)
+	if err != nil {
+		printErr(err.Error())
+		os.Exit(1)
+	}
 }
