@@ -18,9 +18,10 @@ import (
 var wg sync.WaitGroup
 
 type Receive struct {
-	Data   string
-	Status string
-	Id     int
+	Data     string
+	Status   string
+	Id       int
+	Bytecode []byte
 }
 
 type Reply struct {
@@ -87,7 +88,7 @@ func console(id int) {
 	}
 }
 
-func initConn() (*rpc.Client, error) {
+func initConn() (*rpc.Client, string, error) {
 	printSuccess("Connecting to the server...")
 	printWarn("Please type in the server ip and port, separated by :")
 	addr := ""
@@ -95,9 +96,17 @@ func initConn() (*rpc.Client, error) {
 	fmt.Scanln(&addr)
 	client, err := rpc.Dial("tcp", addr)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return client, nil
+	printWarn("Please type in the number of threads:")
+	threads := ""
+	fmt.Print("    ")
+	fmt.Scanln(&threads)
+	_, err = strconv.Atoi(threads)
+	if err != nil {
+		return nil, "", err
+	}
+	return client, threads, nil
 }
 
 func sendStatus(receive Receive, client *rpc.Client) (Reply, error) {
@@ -112,6 +121,15 @@ func sendStatus(receive Receive, client *rpc.Client) (Reply, error) {
 func fetchCode(receive Receive, client *rpc.Client) (Reply, error) {
 	var reply Reply
 	err := client.Call("Listener.Init", receive, &reply)
+	if err != nil {
+		return reply, err
+	}
+	return reply, nil
+}
+
+func sendBytecode(receive Receive, client *rpc.Client) (Reply, error) {
+	var reply Reply
+	err := client.Call("Listener.FetchWorkUnit", receive, &reply)
 	if err != nil {
 		return reply, err
 	}
@@ -175,9 +193,9 @@ func buildCode(filename string) (string, error) {
 	return file_out, nil
 }
 
-func connect(client *rpc.Client) (error, []byte, string, int) {
+func connect(client *rpc.Client, threads string) (error, []byte, string, int) {
 	var reply Reply
-	reply, err := sendStatus(Receive{"", "hello", -1}, client)
+	reply, err := sendStatus(Receive{Data: threads, Status: "hello", Id: -1}, client)
 	if err != nil {
 		return err, nil, "", -1
 	}
@@ -187,7 +205,7 @@ func connect(client *rpc.Client) (error, []byte, string, int) {
 		printErr(reply.Data)
 	}
 	id := reply.Id
-	reply, err = sendStatus(Receive{"", "ready", id}, client)
+	reply, err = sendStatus(Receive{Data: "", Status: "ready", Id: id}, client)
 	if err != nil {
 		return err, nil, "", id
 	}
@@ -195,7 +213,7 @@ func connect(client *rpc.Client) (error, []byte, string, int) {
 		printErr(reply.Data)
 	}
 	printSuccess("Fetching client code...")
-	reply, err = fetchCode(Receive{"", "ready", id}, client)
+	reply, err = fetchCode(Receive{Data: "", Status: "ready", Id: id}, client)
 	if err != nil {
 		return err, nil, "", id
 	}
@@ -207,13 +225,42 @@ func connect(client *rpc.Client) (error, []byte, string, int) {
 	return nil, reply.Bytecode, reply.Data, id
 }
 
+func processWU(client *rpc.Client, filename string, wu []byte, thread, id int) {
+	prefix := "./"
+	if runtime.GOOS == "windows" {
+		prefix = ".\\"
+	}
+	cmd := exec.Command(prefix+filename, string(wu))
+	var out, stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		rec := Receive{Data: err.Error(), Status: "error", Id: id}
+		sendBytecode(rec, client)
+		return
+	}
+	res := out.Bytes()
+	if stderr.String() != "" {
+		rec := Receive{Data: stderr.String(), Status: "error", Id: id}
+		sendBytecode(rec, client)
+		return
+	}
+	rec := Receive{Data: strconv.Itoa(thread), Status: "upload", Id: id, Bytecode: res}
+	reply, err := sendBytecode(rec, client)
+	if reply.Data != "ok" {
+		printErr(reply.Data)
+	}
+	return
+}
+
 func main() {
-	client, err := initConn()
+	client, threads, err := initConn()
 	if err != nil {
 		printErr(err.Error())
 		os.Exit(1)
 	}
-	err, bytecode, filename, id := connect(client)
+	err, bytecode, filename, id := connect(client, threads)
 	if err != nil {
 		printErr(err.Error())
 		os.Exit(1)

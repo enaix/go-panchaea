@@ -29,12 +29,13 @@ var ClientFile []byte
 var Filename string
 
 type Client struct {
-	Id     int
-	Status string
+	Id      int
+	Status  string
+	Threads int
 }
 
-func NewClient(id int, status string) {
-	Clients = append(Clients, Client{Id: id, Status: status})
+func NewClient(id int, status string, threads int) {
+	Clients = append(Clients, Client{Id: id, Status: status, Threads: threads})
 }
 
 func GetClient(id int) (*Client, bool) {
@@ -53,19 +54,11 @@ type Reply struct {
 }
 
 type Receive struct {
-	Data   string
-	Status string
-	Id     int
+	Data     string
+	Status   string
+	Id       int
+	Bytecode []byte
 }
-
-/* type Server struct {
-	Current       int
-	PrepareAmount int
-	WorkUnits [][]byte
-	Custom []byte
-}*/
-
-// var serv Server
 
 type Server interface {
 	Init()
@@ -132,6 +125,16 @@ func (l *Listener) SendWorkUnit(data Receive, reply *Reply) error {
 	return nil
 }
 
+func (l *Listener) FetchWorkUnit(data Receive, reply *Reply) error {
+	id := data.Id
+	// TODO Implement workunit management
+	if data.Status == "error" {
+		printErr(data.Data)
+	}
+	*reply = Reply{Data: "ok", Id: id}
+	return nil
+}
+
 func (l *Listener) SendStatus(data Receive, reply *Reply) error {
 	if data.Status == "hello" {
 		id := data.Id
@@ -139,7 +142,12 @@ func (l *Listener) SendStatus(data Receive, reply *Reply) error {
 			id = len(Clients) + 1
 		}
 		printSuccess("Client " + strconv.Itoa(id) + " is connected")
-		NewClient(id, "connected")
+		threads, err := strconv.Atoi(data.Data)
+		if err != nil {
+			printErr(err.Error())
+			threads = 1
+		}
+		NewClient(id, "connected", threads)
 		*reply = Reply{Data: "ok", Id: id}
 	} else if data.Status == "ready" {
 		printSuccess("Client " + strconv.Itoa(data.Id) + " is ready")
@@ -193,8 +201,6 @@ func initCliConn() (*net.TCPListener, error) {
 	}
 	listener := new(Listener)
 	rpc.Register(listener)
-	// printSuccess("Running...")
-	// rpc.Accept(in)
 	return in, nil
 }
 
