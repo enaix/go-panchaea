@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 )
+
+var Timeout time.Second * 1000
 
 type Result struct {
 	Sum float64

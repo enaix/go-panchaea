@@ -16,9 +16,17 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"time"
+	"context"
+	"os/signal"
+	"syscall"
 )
 
 var wg sync.WaitGroup
+
+var ctx context.Context
+
+var Timeout time.Duration
 
 type Listener int
 
@@ -46,6 +54,46 @@ func GetClient(id int) (*Client, bool) {
 	}
 	return nil, false
 }
+
+type WorkUnit struct {
+	Data []byte
+	Client *Client
+	Thread int
+	Time time.Time
+	Status string  // "new", "running", "completed", "stuck", "failed"
+	Attempt int
+}
+
+func NewWorkUnit (client *Client, data []byte, thread int) error {
+	var wu WorkUnit
+	wu.Client = client
+	wu.Data = data
+	wu.Thread = thread
+	wu.Status = "new"
+	WorkUnits = append(WorkUnits, wu)
+	return nil
+}
+
+func (w *WorkUnit) GetAvailable (client *Client, thread int) (*WorkUnit, bool) {
+	for i, _ := range(WorkUnits) {
+		select {
+			case <-ctx.Done():
+				return &WorkUnit{}, false
+			default:
+				if WorkUnits[i].Status == "stuck" || WorkUnits[i].Status == "failed" {
+					wu := &WorkUnits[i]
+					wu.Client = client
+					wu.Thread = thread
+					wu.Status = "new"
+					wu.Attempt ++
+					return wu, true
+				}
+		}
+	}
+	return &WorkUnit{}, false
+}
+
+var WorkUnits []WorkUnit
 
 type Reply struct {
 	Data     string
@@ -115,7 +163,7 @@ func (l *Listener) Init(data Receive, reply *Reply) error {
 	return nil
 }
 
-func (l *Listener) SendWorkUnit(data Receive, reply *Reply) error {
+/* func (l *Listener) SendWorkUnit(data Receive, reply *Reply) error {
 	id := data.Id
 	wu, err := serv.Run(id)
 	if err != nil {
@@ -123,7 +171,7 @@ func (l *Listener) SendWorkUnit(data Receive, reply *Reply) error {
 	}
 	*reply = Reply{Data: "ok", Id: id, Bytecode: wu}
 	return nil
-}
+} */
 
 func (l *Listener) FetchWorkUnit(data Receive, reply *Reply) error {
 	id := data.Id
@@ -259,6 +307,12 @@ func initClientServer() (func() interface{}, error) {
 		return nil, err
 	}
 	GetServer := run.(func() interface{})
+	dur, err := plug.Lookup("Timeout")
+	if err != nil {
+		return nil, err
+	}
+	tim := dur.(time.Duration)
+	Timeout = tim
 	return GetServer, nil
 }
 
@@ -270,6 +324,47 @@ func initPluginStruct(GetServer func() interface{}) error {
 	}
 	s.Init()
 	return nil
+}
+
+func initContext(kill chan bool) {
+	ctx = context.Background()
+	ctx, cls := context.WithTimeout(ctx, time.Second)
+	go func() {
+		<-kill
+		cls()
+	}()
+}
+
+func handleInterrupt(kill chan bool) {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+	<-ch
+	printErr("Performing clean exit...")
+	close(kill)
+}
+
+func handleClients(tick chan time.Time) {
+	defer wg.Done()
+	for next := range tick {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			for i, _ := range(WorkUnits) {
+				if WorkUnits[i].Status == "running" || WorkUnits[i].Status == "stuck" {
+					WorkUnits[i].Time.Add(time.Second)
+				}
+				if WorkUnits[i].Time.After(next.Add(Timeout)) {
+					WorkUnits[i].Status = "stuck"
+				}
+			}
+		}
+	}
+}
+
+func initTicker() chan time.Time {
+	tick := time.NewTicker(time.Second)
+	return tick
 }
 
 func main() {
@@ -293,7 +388,12 @@ func main() {
 		printErr(err.Error())
 		os.Exit(1)
 	}
-	wg.Add(1)
+	kill := make(chan bool, 1)
+	initContext(kill)
+	t := initTicker()
+	go handleInterrupt(kill)
+	wg.Add(2)
+	go handleClients(t)
 	go processRPC(in)
 	wg.Wait()
 }
