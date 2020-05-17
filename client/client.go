@@ -136,6 +136,16 @@ func sendBytecode(receive Receive, client *rpc.Client) (Reply, error) {
 	return reply, nil
 }
 
+func getBytecode(receive Receive, client *rpc.Client, thread int) (Reply, error) {
+	var reply Reply
+	err := client.Call("Listener.SendWorkUnit", receive, &reply)
+	if err != nil {
+		return reply, err
+	}
+	return reply, nil
+
+}
+
 func writeCode(code []byte, filename string) (string, error) {
 	if _, err := os.Stat("build"); os.IsNotExist(err) {
 		err := os.Mkdir("build", 0755)
@@ -236,13 +246,13 @@ func processWU(client *rpc.Client, filename string, wu []byte, thread, id int) {
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		rec := Receive{Data: err.Error(), Status: "error", Id: id}
+		rec := Receive{Data: err.Error(), Status: "error " + strconv.Itoa(thread), Id: id}
 		sendBytecode(rec, client)
 		return
 	}
 	res := out.Bytes()
 	if stderr.String() != "" {
-		rec := Receive{Data: stderr.String(), Status: "error", Id: id}
+		rec := Receive{Data: stderr.String(), Status: "error " + strconv.Itoa(thread), Id: id}
 		sendBytecode(rec, client)
 		return
 	}

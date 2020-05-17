@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"github.com/fatih/color"
@@ -10,16 +11,16 @@ import (
 	"net/rpc"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"plugin"
 	"regexp"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
-	"time"
-	"context"
-	"os/signal"
 	"syscall"
+	"time"
 )
 
 var wg sync.WaitGroup
@@ -56,38 +57,56 @@ func GetClient(id int) (*Client, bool) {
 }
 
 type WorkUnit struct {
-	Data []byte
-	Client *Client
-	Thread int
-	Time time.Time
-	Status string  // "new", "running", "completed", "stuck", "failed"
+	Data    []byte
+	Client  *Client
+	Thread  int
+	Time    time.Time
+	Status  string // "new", "running", "completed", "stuck", "failed"
 	Attempt int
+	Result  []byte
 }
 
-func NewWorkUnit (client *Client, data []byte, thread int) error {
+func NewWorkUnit(client *Client, data []byte, thread int) *WorkUnit {
 	var wu WorkUnit
 	wu.Client = client
 	wu.Data = data
 	wu.Thread = thread
 	wu.Status = "new"
 	WorkUnits = append(WorkUnits, wu)
-	return nil
+	return &wu
 }
 
-func (w *WorkUnit) GetAvailable (client *Client, thread int) (*WorkUnit, bool) {
-	for i, _ := range(WorkUnits) {
+func GetWorkUnit(client *Client, thread int) (*WorkUnit, bool) {
+	wu := WorkUnit{}
+	ok := false
+	for i, _ := range WorkUnits {
 		select {
-			case <-ctx.Done():
-				return &WorkUnit{}, false
-			default:
-				if WorkUnits[i].Status == "stuck" || WorkUnits[i].Status == "failed" {
-					wu := &WorkUnits[i]
-					wu.Client = client
-					wu.Thread = thread
-					wu.Status = "new"
-					wu.Attempt ++
-					return wu, true
-				}
+		case <-ctx.Done():
+			return &WorkUnit{}, false
+		default:
+			if WorkUnits[i].Client.Id == client.Id && WorkUnits[i].Thread == thread {
+				wu = WorkUnits[i]
+				ok = true
+			}
+		}
+	}
+	return &wu, ok
+}
+
+func GetAvailable(client *Client, thread int) (*WorkUnit, bool) {
+	for i, _ := range WorkUnits {
+		select {
+		case <-ctx.Done():
+			return &WorkUnit{}, false
+		default:
+			if WorkUnits[i].Status == "stuck" || WorkUnits[i].Status == "failed" {
+				wu := &WorkUnits[i]
+				wu.Client = client
+				wu.Thread = thread
+				wu.Status = "new"
+				wu.Attempt++
+				return wu, true
+			}
 		}
 	}
 	return &WorkUnit{}, false
@@ -163,22 +182,78 @@ func (l *Listener) Init(data Receive, reply *Reply) error {
 	return nil
 }
 
-/* func (l *Listener) SendWorkUnit(data Receive, reply *Reply) error {
-	id := data.Id
-	wu, err := serv.Run(id)
-	if err != nil {
-		printErr(err.Error())
-	}
-	*reply = Reply{Data: "ok", Id: id, Bytecode: wu}
-	return nil
-} */
-
 func (l *Listener) FetchWorkUnit(data Receive, reply *Reply) error {
 	id := data.Id
-	// TODO Implement workunit management
+	cli, ok := GetClient(id)
+	if !ok {
+		printErr("[" + strconv.Itoa(id) + "] " + "Client not found!")
+		*reply = Reply{Data: "client not found", Id: id}
+		return errors.New("Client not found")
+	}
+	if data.Status != "upload" {
+		thread, err := strconv.Atoi(strings.Split(data.Status, " ")[1])
+		if err != nil {
+			printErr(err.Error())
+			return err
+		}
+		printErr("[" + strconv.Itoa(id) + "] " + data.Data)
+		wu, ok := GetWorkUnit(cli, thread)
+		if !ok {
+			printErr("[" + strconv.Itoa(id) + "] " + "Error not found! Cannot compute")
+			*reply = Reply{Data: "error", Id: id}
+			return errors.New("Cannot compute")
+		}
+		wu.Status = "error"
+		*reply = Reply{Data: "error", Id: id}
+		return errors.New(data.Data)
+	}
+	thread, err := strconv.Atoi(data.Data)
+	if err != nil {
+		printErr(err.Error())
+		*reply = Reply{Data: "error", Id: id}
+		return err
+	}
+	wu, ok := GetWorkUnit(cli, thread)
+	if !ok {
+		printErr("[" + strconv.Itoa(id) + "] " + "Workunit not found on thread " + strconv.Itoa(thread))
+		*reply = Reply{Data: "error", Id: id}
+		return errors.New("Workunit not found")
+	}
+	wu.Status = "completed"
+	wu.Result = data.Bytecode
+	*reply = Reply{Data: "ok", Id: id}
+	return nil
+}
+
+func (l *Listener) SendWorkUnit(data Receive, reply *Reply) error {
+	id := data.Id
+	cli, ok := GetClient(id)
+	if !ok {
+		printErr("[" + strconv.Itoa(id) + "] " + "Client not found!")
+		*reply = Reply{Data: "client not found", Id: id}
+		return errors.New("Client not found")
+	}
+	thread, err := strconv.Atoi(data.Data)
+	if err != nil {
+		printErr(err.Error())
+		*reply = Reply{Data: "error", Id: id}
+		return err
+	}
+	wu, ok := GetAvailable(cli, thread)
+	if !ok {
+		work, err := serv.Run(id)
+		if err != nil {
+			printErr(err.Error())
+			*reply = Reply{Data: "error", Id: id}
+			return err
+		}
+		wu = NewWorkUnit(cli, work, thread)
+	}
 	if data.Status == "error" {
+		*reply = Reply{Data: "error", Id: id}
 		printErr(data.Data)
 	}
+	wu.Status = "running"
 	*reply = Reply{Data: "ok", Id: id}
 	return nil
 }
@@ -323,12 +398,14 @@ func initPluginStruct(GetServer func() interface{}) error {
 		return errors.New("Could not receive the server interface!")
 	}
 	s.Init()
+	serv = s
 	return nil
 }
 
 func initContext(kill chan bool) {
-	ctx = context.Background()
-	ctx, cls := context.WithTimeout(ctx, time.Second)
+	cont := context.Background()
+	cont, cls := context.WithTimeout(ctx, time.Second)
+	ctx = cont
 	go func() {
 		<-kill
 		cls()
@@ -343,14 +420,15 @@ func handleInterrupt(kill chan bool) {
 	close(kill)
 }
 
-func handleClients(tick chan time.Time) {
+func handleClients(tick *time.Ticker) {
 	defer wg.Done()
-	for next := range tick {
+	for next := range tick.C {
 		select {
 		case <-ctx.Done():
+			tick.Stop()
 			return
 		default:
-			for i, _ := range(WorkUnits) {
+			for i, _ := range WorkUnits {
 				if WorkUnits[i].Status == "running" || WorkUnits[i].Status == "stuck" {
 					WorkUnits[i].Time.Add(time.Second)
 				}
@@ -362,7 +440,7 @@ func handleClients(tick chan time.Time) {
 	}
 }
 
-func initTicker() chan time.Time {
+func initTicker() *time.Ticker {
 	tick := time.NewTicker(time.Second)
 	return tick
 }

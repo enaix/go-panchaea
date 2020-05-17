@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-var Timeout time.Second * 1000
+var Timeout time.Duration
 
 type Result struct {
 	Sum float64
@@ -29,6 +29,7 @@ type Server struct {
 func (s *Server) Init() {
 	s.Current = 0
 	s.PrepareAmount = 10
+	Timeout = time.Second * 1000
 }
 
 func (s *Server) Run(id int) ([]byte, error) {
