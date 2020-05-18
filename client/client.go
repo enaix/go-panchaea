@@ -2,20 +2,29 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"github.com/fatih/color"
 	"net/rpc"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 )
 
 var wg sync.WaitGroup
+
+var ctx context.Context
+
+// TODO add config and log feature
+var WUAttempts int // Max failures for one WU, default 2
 
 type Receive struct {
 	Data     string
@@ -29,6 +38,16 @@ type Reply struct {
 	Id       int
 	Bytecode []byte
 }
+
+type Thread struct {
+	Id       int
+	Status   string // "ready", "downloading", "uploading", "running", "failed"
+	WorkUnit []byte
+	Result   []byte
+	Attempts int
+}
+
+var Threads []Thread
 
 func isFormatted(s string) bool {
 	re := regexp.MustCompile(`[\[]+(\w|\W)+[\]]+\s*\w*`)
@@ -264,8 +283,60 @@ func processWU(client *rpc.Client, filename string, wu []byte, thread, id int) {
 	return
 }
 
+func initThreads(threads int) {
+	Threads = make([]Thread, 0)
+	for i := 0; i < threads; i++ {
+		Threads = append(Threads, Thread{Id: i + 1, Status: "ready"})
+	}
+}
+
+func handleThreads() error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+			for i, _ := range Threads {
+				if Threads[i].Status == "ready" {
+					// Assign new WU
+					continue
+				} else if Threads[i].Status == "failed" {
+					if Threads[i].Attempts == WUAttempts {
+						// Assign new WU
+						continue
+					}
+					// Re-run the WU
+				}
+			}
+		}
+	}
+}
+
+func initContext(kill chan bool) {
+	cont, cls := context.WithTimeout(context.Background(), time.Second)
+	ctx = cont
+	go func() {
+		<-kill
+		cls()
+	}()
+}
+
+func handleInterrupt(kill chan bool) {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+	<-ch
+	printErr("Performing clean exit...")
+	kill <- true
+	close(kill)
+}
+
 func main() {
 	client, threads, err := initConn()
+	if err != nil {
+		printErr(err.Error())
+		os.Exit(1)
+	}
+	thr, err := strconv.Atoi(threads)
 	if err != nil {
 		printErr(err.Error())
 		os.Exit(1)
@@ -282,6 +353,10 @@ func main() {
 	}
 	out, err := buildCode(fname)
 	fmt.Println(out)
+	initThreads(thr)
+	kill := make(chan bool, 1)
+	initContext(kill)
+	go handleInterrupt(kill)
 	wg.Add(1)
 	go console(id)
 	wg.Wait()

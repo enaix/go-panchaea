@@ -27,7 +27,10 @@ var wg sync.WaitGroup
 
 var ctx context.Context
 
-var Timeout time.Duration
+var Timeout *time.Duration
+
+// TODO add config and log feature
+var WUAttempts int // Max failures for one WU, default 2
 
 type Listener int
 
@@ -61,7 +64,7 @@ type WorkUnit struct {
 	Client  *Client
 	Thread  int
 	Time    time.Time
-	Status  string // "new", "running", "completed", "stuck", "failed"
+	Status  string // "new", "running", "completed", "stuck", "failed", "dead"
 	Attempt int
 	Result  []byte
 }
@@ -100,6 +103,11 @@ func GetAvailable(client *Client, thread int) (*WorkUnit, bool) {
 			return &WorkUnit{}, false
 		default:
 			if WorkUnits[i].Status == "stuck" || WorkUnits[i].Status == "failed" {
+				if WorkUnits[i].Attempt == WUAttempts {
+					WorkUnits[i].Status = "dead"
+					printErr("FATAL: WorkUnit exceeded all " + strconv.Itoa(WUAttempts) + " attempt(s)")
+					continue
+				}
 				wu := &WorkUnits[i]
 				wu.Client = client
 				wu.Thread = thread
@@ -203,7 +211,7 @@ func (l *Listener) FetchWorkUnit(data Receive, reply *Reply) error {
 			*reply = Reply{Data: "error", Id: id}
 			return errors.New("Cannot compute")
 		}
-		wu.Status = "error"
+		wu.Status = "failed"
 		*reply = Reply{Data: "error", Id: id}
 		return errors.New(data.Data)
 	}
@@ -305,6 +313,7 @@ func initProject() error {
 	_, file := filepath.Split(Filename)
 	Filename = file
 	printSuccess("File is succesfully loaded")
+	WUAttempts = 2
 	return nil
 }
 
@@ -386,7 +395,7 @@ func initClientServer() (func() interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	tim := dur.(time.Duration)
+	tim := dur.(*time.Duration)
 	Timeout = tim
 	return GetServer, nil
 }
@@ -403,8 +412,7 @@ func initPluginStruct(GetServer func() interface{}) error {
 }
 
 func initContext(kill chan bool) {
-	cont := context.Background()
-	cont, cls := context.WithTimeout(ctx, time.Second)
+	cont, cls := context.WithTimeout(context.Background(), time.Second)
 	ctx = cont
 	go func() {
 		<-kill
@@ -412,11 +420,13 @@ func initContext(kill chan bool) {
 	}()
 }
 
-func handleInterrupt(kill chan bool) {
+func handleInterrupt(kill chan bool, lis *net.TCPListener) {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 	<-ch
 	printErr("Performing clean exit...")
+	lis.Close()
+	kill <- true
 	close(kill)
 }
 
@@ -432,7 +442,7 @@ func handleClients(tick *time.Ticker) {
 				if WorkUnits[i].Status == "running" || WorkUnits[i].Status == "stuck" {
 					WorkUnits[i].Time.Add(time.Second)
 				}
-				if WorkUnits[i].Time.After(next.Add(Timeout)) {
+				if WorkUnits[i].Time.After(next.Add(*Timeout)) {
 					WorkUnits[i].Status = "stuck"
 				}
 			}
@@ -469,7 +479,7 @@ func main() {
 	kill := make(chan bool, 1)
 	initContext(kill)
 	t := initTicker()
-	go handleInterrupt(kill)
+	go handleInterrupt(kill, in)
 	wg.Add(2)
 	go handleClients(t)
 	go processRPC(in)
