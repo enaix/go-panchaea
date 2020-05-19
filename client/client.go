@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"github.com/fatih/color"
 	"net/rpc"
@@ -125,6 +126,7 @@ func initConn() (*rpc.Client, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
+	WUAttempts = 2
 	return client, threads, nil
 }
 
@@ -162,7 +164,15 @@ func getBytecode(receive Receive, client *rpc.Client, thread int) (Reply, error)
 		return reply, err
 	}
 	return reply, nil
+}
 
+func reloadBytecode(receive Receive, client *rpc.Client, thread int) (Reply, error) {
+	var reply Reply
+	err := client.Call("Listener.ReloadWorkUnit", receive, &reply)
+	if err != nil {
+		return reply, err
+	}
+	return reply, nil
 }
 
 func writeCode(code []byte, filename string) (string, error) {
@@ -254,33 +264,83 @@ func connect(client *rpc.Client, threads string) (error, []byte, string, int) {
 	return nil, reply.Bytecode, reply.Data, id
 }
 
-func processWU(client *rpc.Client, filename string, wu []byte, thread, id int) {
+func fetchWU(client *rpc.Client, thread *Thread, id int) error {
+	rec := Receive{Data: strconv.Itoa(thread.Id), Status: "download", Id: id}
+	reply, err := getBytecode(rec, client, thread.Id)
+	if err != nil {
+		printErr(err.Error())
+		thread.Status = "failed"
+		return err
+	}
+	if reply.Data != "ok" {
+		printErr("Failed to download WU!")
+		thread.Status = "failed"
+		return errors.New("WU download failed")
+	}
+	thread.WorkUnit = reply.Bytecode
+	thread.Status = "running"
+	return nil
+}
+
+func processWU(client *rpc.Client, filename string, thread *Thread, id int) {
 	prefix := "./"
 	if runtime.GOOS == "windows" {
 		prefix = ".\\"
 	}
-	cmd := exec.Command(prefix+filename, string(wu))
+	cmd := exec.Command(prefix+filename, string(thread.WorkUnit))
 	var out, stderr bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		rec := Receive{Data: err.Error(), Status: "error " + strconv.Itoa(thread), Id: id}
+		thread.Status = "failed"
+		rec := Receive{Data: err.Error(), Status: "error " + strconv.Itoa(thread.Id), Id: id}
 		sendBytecode(rec, client)
 		return
 	}
 	res := out.Bytes()
 	if stderr.String() != "" {
-		rec := Receive{Data: stderr.String(), Status: "error " + strconv.Itoa(thread), Id: id}
+		thread.Status = "failed"
+		rec := Receive{Data: stderr.String(), Status: "error " + strconv.Itoa(thread.Id), Id: id}
 		sendBytecode(rec, client)
 		return
 	}
-	rec := Receive{Data: strconv.Itoa(thread), Status: "upload", Id: id, Bytecode: res}
+	rec := Receive{Data: strconv.Itoa(thread.Id), Status: "upload", Id: id, Bytecode: res}
 	reply, err := sendBytecode(rec, client)
 	if reply.Data != "ok" {
 		printErr(reply.Data)
 	}
+	thread.Status = "ready"
 	return
+}
+
+func reloadWU(client *rpc.Client, thread *Thread, id int) error {
+	rec := Receive{Data: strconv.Itoa(thread.Id), Status: "download", Id: id}
+	reply, err := reloadBytecode(rec, client, thread.Id)
+	if err != nil {
+		printErr(err.Error())
+		thread.Status = "failed"
+		return err
+	}
+	if reply.Data != "ok" {
+		msg := reply.Data
+		if msg == "no such wu" {
+			printErr("Failed to reload WU: No such WU!")
+			thread.Status = "failed"
+			return errors.New("WU does not exist!")
+		} else if msg == "dead" {
+			printErr("Failed to reload WU: Too many failed attempts!")
+			thread.Status = "failed"
+			return errors.New("WU is dead!")
+		} else {
+			printErr(msg)
+			thread.Status = "failed"
+			return errors.New("Unknown WU reload error!")
+		}
+	}
+	thread.WorkUnit = reply.Bytecode
+	thread.Status = "running"
+	return nil
 }
 
 func initThreads(threads int) {
@@ -290,7 +350,7 @@ func initThreads(threads int) {
 	}
 }
 
-func handleThreads() error {
+func handleThreads(client *rpc.Client, id int, filename string) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -298,14 +358,38 @@ func handleThreads() error {
 		default:
 			for i, _ := range Threads {
 				if Threads[i].Status == "ready" {
-					// Assign new WU
-					continue
-				} else if Threads[i].Status == "failed" {
-					if Threads[i].Attempts == WUAttempts {
-						// Assign new WU
+					Threads[i].Attempts = 0
+					err := fetchWU(client, &Threads[i], id)
+					if err != nil {
+						Threads[i].Status = "failed"
+						printErr("[" + strconv.Itoa(Threads[i].Id) + "] " + err.Error())
 						continue
 					}
-					// Re-run the WU
+					Threads[i].Status = "running"
+					go processWU(client, filename, &Threads[i], id)
+				} else if Threads[i].Status == "failed" {
+					if Threads[i].Attempts >= WUAttempts {
+						Threads[i].Attempts = 0
+						err := fetchWU(client, &Threads[i], id)
+						if err != nil {
+							Threads[i].Status = "failed"
+							printErr("[" + strconv.Itoa(Threads[i].Id) + "] " + err.Error())
+							continue
+						}
+						Threads[i].Status = "running"
+						go processWU(client, filename, &Threads[i], id)
+						continue
+					}
+					Threads[i].Attempts++
+					err := reloadWU(client, &Threads[i], id)
+					if err != nil {
+						printErr("[" + strconv.Itoa(Threads[i].Id) + "] " + err.Error())
+						Threads[i].Status = "failed"
+						Threads[i].Attempts = WUAttempts
+						continue
+					}
+					Threads[i].Status = "running"
+					go processWU(client, filename, &Threads[i], id)
 				}
 			}
 		}

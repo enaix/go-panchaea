@@ -62,9 +62,9 @@ func GetClient(id int) (*Client, bool) {
 type WorkUnit struct {
 	Data    []byte
 	Client  *Client
-	Thread  int
+	Thread  int // 1 to n
 	Time    time.Time
-	Status  string // "new", "running", "completed", "stuck", "failed", "dead"
+	Status  string // "new", "running", "completed", "stuck", "failed", "unknown", "dead"
 	Attempt int
 	Result  []byte
 }
@@ -103,7 +103,7 @@ func GetAvailable(client *Client, thread int) (*WorkUnit, bool) {
 			return &WorkUnit{}, false
 		default:
 			if WorkUnits[i].Status == "stuck" || WorkUnits[i].Status == "failed" {
-				if WorkUnits[i].Attempt == WUAttempts {
+				if WorkUnits[i].Attempt >= WUAttempts {
 					WorkUnits[i].Status = "dead"
 					printErr("FATAL: WorkUnit exceeded all " + strconv.Itoa(WUAttempts) + " attempt(s)")
 					continue
@@ -114,6 +114,12 @@ func GetAvailable(client *Client, thread int) (*WorkUnit, bool) {
 				wu.Status = "new"
 				wu.Attempt++
 				return wu, true
+			} else if WorkUnits[i].Status == "unknown" {
+				if WorkUnits[i].Attempt >= WUAttempts {
+					WorkUnits[i].Status = "dead"
+					printErr("FATAL: WorkUnit exceeded all " + strconv.Itoa(WUAttempts) + " attempt(s)")
+					continue
+				}
 			}
 		}
 	}
@@ -260,9 +266,41 @@ func (l *Listener) SendWorkUnit(data Receive, reply *Reply) error {
 	if data.Status == "error" {
 		*reply = Reply{Data: "error", Id: id}
 		printErr(data.Data)
+		return errors.New(data.Data)
 	}
 	wu.Status = "running"
-	*reply = Reply{Data: "ok", Id: id}
+	*reply = Reply{Data: "ok", Id: id, Bytecode: wu.Data}
+	return nil
+}
+
+func (l *Listener) ReloadWorkUnit(data Receive, reply *Reply) error {
+	id := data.Id
+	cli, ok := GetClient(id)
+	if !ok {
+		printErr("[" + strconv.Itoa(id) + "] " + "Client not found!")
+		*reply = Reply{Data: "client not found", Id: id}
+		return errors.New("Client not found")
+	}
+	thread, err := strconv.Atoi(data.Data)
+	if err != nil {
+		printErr(err.Error())
+		*reply = Reply{Data: "error", Id: id}
+		return err
+	}
+	wu, ok := GetWorkUnit(cli, thread)
+	if !ok {
+		printErr("[" + strconv.Itoa(id) + "] " + "Cannot re-upload: no such WU!")
+		*reply = Reply{Data: "no such wu", Id: id}
+		return errors.New("Cannot re-upload: no such WU")
+	}
+	if wu.Attempt >= WUAttempts || wu.Status == "dead" {
+		printErr("[" + strconv.Itoa(id) + "] " + "Cannot re-upload: too many failed attempts!")
+		*reply = Reply{Data: "dead", Id: id}
+		return errors.New("Cannot re-upload: too many failed attempts")
+	}
+	wu.Attempt++
+	wu.Status = "unknown"
+	*reply = Reply{Data: "ok", Id: id, Bytecode: wu.Data}
 	return nil
 }
 
