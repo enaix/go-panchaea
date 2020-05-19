@@ -92,7 +92,7 @@ func printWarn(s string) {
 	Logger.Println("[W]:    " + s)
 }
 
-func console(id int, kill chan bool) {
+func console(id int, kill chan bool, input chan string) {
 	defer wg.Done()
 	for {
 		select {
@@ -101,7 +101,11 @@ func console(id int, kill chan bool) {
 		default:
 			cmd := ""
 			fmt.Print("[" + strconv.Itoa(id) + "] cli > ")
-			fmt.Scanln(&cmd)
+			// fmt.Scanln(&cmd)
+			go func() {
+				fmt.Scanln(&input)
+			}()
+			cmd = <-input
 			cmd = strings.TrimSpace(cmd)
 			if cmd == "" {
 				continue
@@ -442,9 +446,10 @@ func handleInterrupt(kill chan bool) {
 	close(kill)
 }
 
-func handleCleanExit(f *os.File) {
+func handleCleanExit(f *os.File, input chan string) {
 	<-ctx.Done()
 	f.Close()
+	close(input)
 }
 
 func main() {
@@ -477,11 +482,12 @@ func main() {
 	fmt.Println(out)
 	initThreads(thr)
 	kill := make(chan bool, 1)
+	input := make(chan string, 1)
 	initContext(kill)
 	go handleInterrupt(kill)
-	go handleCleanExit(logfile)
+	go handleCleanExit(logfile, input)
 	wg.Add(2)
-	go console(id, kill)
+	go console(id, kill, input)
 	go handleThreads(client, id, out)
 	wg.Wait()
 }
