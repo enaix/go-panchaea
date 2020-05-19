@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/fatih/color"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/rpc"
 	"os"
@@ -26,6 +27,8 @@ import (
 var wg sync.WaitGroup
 
 var ctx context.Context
+
+var Logger *log.Logger
 
 var Timeout *time.Duration
 
@@ -166,6 +169,7 @@ func printErr(err string) {
 		color.New(color.FgRed).Fprintf(os.Stderr, "[!] ")
 		fmt.Println(err)
 	}
+	Logger.Println("[E]:    " + err)
 }
 
 func printSuccess(s string) {
@@ -175,6 +179,7 @@ func printSuccess(s string) {
 		color.New(color.FgGreen).Print("[*] ")
 		fmt.Println(s)
 	}
+	Logger.Println("[I]:    " + s)
 }
 
 func printWarn(s string) {
@@ -184,6 +189,7 @@ func printWarn(s string) {
 		color.New(color.FgYellow).Print("[*] ")
 		fmt.Println(s)
 	}
+	Logger.Println("[W]:    " + s)
 }
 
 func (l *Listener) Init(data Receive, reply *Reply) error {
@@ -449,6 +455,16 @@ func initPluginStruct(GetServer func() interface{}) error {
 	return nil
 }
 
+func initLogger() (*os.File, error) {
+	f, err := os.OpenFile("panchaea_server.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return f, err
+	}
+	l := log.New(f, "[server]", log.Ltime)
+	Logger = l
+	return f, nil
+}
+
 func initContext(kill chan bool) {
 	cont, cls := context.WithTimeout(context.Background(), time.Second)
 	ctx = cont
@@ -466,6 +482,11 @@ func handleInterrupt(kill chan bool, lis *net.TCPListener) {
 	lis.Close()
 	kill <- true
 	close(kill)
+}
+
+func handleCleanExit(f *os.File) {
+	<-ctx.Done()
+	f.Close()
 }
 
 func handleClients(tick *time.Ticker) {
@@ -494,7 +515,12 @@ func initTicker() *time.Ticker {
 }
 
 func main() {
-	err := initProject()
+	logfile, err := initLogger()
+	if err != nil {
+		fmt.Println("[!] " + err.Error())
+		os.Exit(1)
+	}
+	err = initProject()
 	if err != nil {
 		printErr(err.Error())
 		os.Exit(1)
@@ -518,6 +544,7 @@ func main() {
 	initContext(kill)
 	t := initTicker()
 	go handleInterrupt(kill, in)
+	go handleCleanExit(logfile)
 	wg.Add(2)
 	go handleClients(t)
 	go processRPC(in)

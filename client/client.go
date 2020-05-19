@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/fatih/color"
+	"log"
 	"net/rpc"
 	"os"
 	"os/exec"
@@ -23,6 +24,8 @@ import (
 var wg sync.WaitGroup
 
 var ctx context.Context
+
+var Logger *log.Logger
 
 // TODO add config and log feature
 var WUAttempts int // Max failures for one WU, default 2
@@ -66,6 +69,7 @@ func printErr(err string) {
 		color.New(color.FgRed).Fprintf(os.Stderr, "[!] ")
 		fmt.Println(err)
 	}
+	Logger.Println("[E]:    " + err)
 }
 
 func printSuccess(s string) {
@@ -75,6 +79,7 @@ func printSuccess(s string) {
 		color.New(color.FgGreen).Print("[*] ")
 		fmt.Println(s)
 	}
+	Logger.Println("[I]:    " + s)
 }
 
 func printWarn(s string) {
@@ -84,26 +89,33 @@ func printWarn(s string) {
 		color.New(color.FgYellow).Print("[*] ")
 		fmt.Println(s)
 	}
+	Logger.Println("[W]:    " + s)
 }
 
-func console(id int) {
+func console(id int, kill chan bool) {
 	defer wg.Done()
 	for {
-		cmd := ""
-		fmt.Print("[" + strconv.Itoa(id) + "] cli > ")
-		fmt.Scanln(&cmd)
-		cmd = strings.TrimSpace(cmd)
-		if cmd == "" {
-			continue
-		} else if cmd == "exit" {
-			// TODO add exit func
+		select {
+		case <-ctx.Done():
 			return
-		} else if cmd == "help" {
-			printWarn("This cli is not implemented")
-			printWarn("type `exit` for exit")
-		} else {
-			printErr("cli: " + cmd + " command not found")
-			printErr("    print `help` for help")
+		default:
+			cmd := ""
+			fmt.Print("[" + strconv.Itoa(id) + "] cli > ")
+			fmt.Scanln(&cmd)
+			cmd = strings.TrimSpace(cmd)
+			if cmd == "" {
+				continue
+			} else if cmd == "exit" {
+				kill <- true
+				close(kill)
+				return
+			} else if cmd == "help" {
+				printWarn("This cli is not implemented") // TODO implement CLI
+				printWarn("type `exit` for exit")
+			} else {
+				printErr("cli: " + cmd + " command not found")
+				printErr("    print `help` for help")
+			}
 		}
 	}
 }
@@ -350,25 +362,29 @@ func initThreads(threads int) {
 	}
 }
 
+func initLogger() (*os.File, error) {
+	f, err := os.OpenFile("panchaea_client.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return f, err
+	}
+	l := log.New(f, "[client]", log.Ltime)
+	Logger = l
+	return f, nil
+}
+
 func handleThreads(client *rpc.Client, id int, filename string) error {
+	defer wg.Done()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		default:
 			for i, _ := range Threads {
-				if Threads[i].Status == "ready" {
-					Threads[i].Attempts = 0
-					err := fetchWU(client, &Threads[i], id)
-					if err != nil {
-						Threads[i].Status = "failed"
-						printErr("[" + strconv.Itoa(Threads[i].Id) + "] " + err.Error())
-						continue
-					}
-					Threads[i].Status = "running"
-					go processWU(client, filename, &Threads[i], id)
-				} else if Threads[i].Status == "failed" {
-					if Threads[i].Attempts >= WUAttempts {
+				select {
+				case <-ctx.Done():
+					return nil
+				default:
+					if Threads[i].Status == "ready" {
 						Threads[i].Attempts = 0
 						err := fetchWU(client, &Threads[i], id)
 						if err != nil {
@@ -378,18 +394,30 @@ func handleThreads(client *rpc.Client, id int, filename string) error {
 						}
 						Threads[i].Status = "running"
 						go processWU(client, filename, &Threads[i], id)
-						continue
+					} else if Threads[i].Status == "failed" {
+						if Threads[i].Attempts >= WUAttempts {
+							Threads[i].Attempts = 0
+							err := fetchWU(client, &Threads[i], id)
+							if err != nil {
+								Threads[i].Status = "failed"
+								printErr("[" + strconv.Itoa(Threads[i].Id) + "] " + err.Error())
+								continue
+							}
+							Threads[i].Status = "running"
+							go processWU(client, filename, &Threads[i], id)
+							continue
+						}
+						Threads[i].Attempts++
+						err := reloadWU(client, &Threads[i], id)
+						if err != nil {
+							printErr("[" + strconv.Itoa(Threads[i].Id) + "] " + err.Error())
+							Threads[i].Status = "failed"
+							Threads[i].Attempts = WUAttempts
+							continue
+						}
+						Threads[i].Status = "running"
+						go processWU(client, filename, &Threads[i], id)
 					}
-					Threads[i].Attempts++
-					err := reloadWU(client, &Threads[i], id)
-					if err != nil {
-						printErr("[" + strconv.Itoa(Threads[i].Id) + "] " + err.Error())
-						Threads[i].Status = "failed"
-						Threads[i].Attempts = WUAttempts
-						continue
-					}
-					Threads[i].Status = "running"
-					go processWU(client, filename, &Threads[i], id)
 				}
 			}
 		}
@@ -414,7 +442,17 @@ func handleInterrupt(kill chan bool) {
 	close(kill)
 }
 
+func handleCleanExit(f *os.File) {
+	<-ctx.Done()
+	f.Close()
+}
+
 func main() {
+	logfile, err := initLogger()
+	if err != nil {
+		fmt.Println("[!] " + err.Error())
+		os.Exit(1)
+	}
 	client, threads, err := initConn()
 	if err != nil {
 		printErr(err.Error())
@@ -441,7 +479,9 @@ func main() {
 	kill := make(chan bool, 1)
 	initContext(kill)
 	go handleInterrupt(kill)
-	wg.Add(1)
-	go console(id)
+	go handleCleanExit(logfile)
+	wg.Add(2)
+	go console(id, kill)
+	go handleThreads(client, id, out)
 	wg.Wait()
 }
