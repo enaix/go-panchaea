@@ -367,8 +367,8 @@ func initProject(client_file string) (error, string) {
 }
 
 func initCliConn(port string) (*net.TCPListener, string, error) {
+	printSuccess("Resolving TCP Address...")
 	if *overwrite {
-		printSuccess("Resolving TCP Address...")
 		printWarn("Please type in the communication port")
 		fmt.Print("    ")
 		port = ""
@@ -524,9 +524,9 @@ func initTicker() *time.Ticker {
 	return tick
 }
 
-func initConfig(config_file string) (string, string, string, *viper.Viper) {
+func initConfig() (string, string, string, *viper.Viper) {
 	v := viper.New()
-	dir, fname := filepath.Split(config_file)
+	dir, fname := filepath.Split(*config_file)
 	if dir == "" {
 		dir = "."
 	}
@@ -555,11 +555,11 @@ func readConfig(v *viper.Viper) (string, string, string, bool) {
 	return client_file, port, server_file, true
 }
 
-func writeConfig(v *viper.Viper, client_file, port, server_file, config_file string) error {
+func writeConfig(v *viper.Viper, client_file, port, server_file string) error {
 	v.Set("ClientFile", client_file)
 	v.Set("Port", port)
 	v.Set("ServerFile", server_file)
-	err := v.WriteConfigAs(config_file)
+	err := v.WriteConfigAs(*config_file)
 	if err != nil {
 		return err
 	}
@@ -578,7 +578,7 @@ func main() {
 		os.Exit(1)
 	}
 	flag.Parse()
-	client_file, port, server_file, v := initConfig(*config_file)
+	client_file, port, server_file, v := initConfig()
 	ok := true
 	if !*overwrite {
 		client_file, port, server_file, ok = readConfig(v)
@@ -612,7 +612,7 @@ func main() {
 		os.Exit(1)
 	}
 	if *overwrite {
-		err = writeConfig(v, client_file, port, server_file, *config_file)
+		err = writeConfig(v, client_file, port, server_file)
 		if err != nil {
 			printErr(err.Error())
 		}

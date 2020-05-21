@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"github.com/fatih/color"
+	"github.com/spf13/viper"
 	"log"
 	"net/rpc"
 	"os"
@@ -124,26 +126,30 @@ func console(id int, kill chan bool, input chan string) {
 	}
 }
 
-func initConn() (*rpc.Client, string, error) {
+func initConn(addr, threads string) (*rpc.Client, string, string, error) {
 	printSuccess("Connecting to the server...")
-	printWarn("Please type in the server ip and port, separated by :")
-	addr := ""
-	fmt.Print("    ")
-	fmt.Scanln(&addr)
+	if *overwrite {
+		printWarn("Please type in the server ip and port, separated by :")
+		addr = ""
+		fmt.Print("    ")
+		fmt.Scanln(&addr)
+	}
 	client, err := rpc.Dial("tcp", addr)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
-	printWarn("Please type in the number of threads:")
-	threads := ""
-	fmt.Print("    ")
-	fmt.Scanln(&threads)
+	if *overwrite {
+		printWarn("Please type in the number of threads:")
+		threads = ""
+		fmt.Print("    ")
+		fmt.Scanln(&threads)
+	}
 	_, err = strconv.Atoi(threads)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	WUAttempts = 2
-	return client, threads, nil
+	return client, addr, threads, nil
 }
 
 func sendStatus(receive Receive, client *rpc.Client) (Reply, error) {
@@ -452,13 +458,75 @@ func handleCleanExit(f *os.File, input chan string) {
 	close(input)
 }
 
+func initTicker() *time.Ticker {
+	tick := time.NewTicker(time.Second)
+	return tick
+}
+
+func initConfig() (string, string, *viper.Viper) {
+	v := viper.New()
+	dir, fname := filepath.Split(*config_file)
+	if dir == "" {
+		dir = "."
+	}
+	filename := strings.Split(fname, ".")
+	v.SetDefault("Addr", "")
+	v.SetDefault("Threads", "4")
+	v.SetConfigName(filename[0])
+	v.SetConfigType(filename[1])
+	v.AddConfigPath(dir)
+	return "", "4", v
+}
+
+func readConfig(v *viper.Viper) (string, string, bool) {
+	if err := v.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			printErr("Config file not found!")
+			return "", "", false
+		}
+		printErr("Could not read from the config file!")
+		return "", "", false
+	}
+	addr := v.GetString("Addr")
+	threads := v.GetString("Threads")
+	return addr, threads, true
+}
+
+func writeConfig(v *viper.Viper, addr, threads string) error {
+	v.Set("Addr", addr)
+	v.Set("Threads", threads)
+	err := v.WriteConfigAs(*config_file)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+var (
+	config_file = flag.String("config", "panchaea_client.json", "config file location")
+	overwrite   = flag.Bool("n", false, "do not read from the config file")
+)
+
 func main() {
 	logfile, err := initLogger()
 	if err != nil {
 		fmt.Println("[!] " + err.Error())
 		os.Exit(1)
 	}
-	client, threads, err := initConn()
+	flag.Parse()
+	addr, threads, v := initConfig()
+	ok := true
+	if !*overwrite {
+		addr, threads, ok = readConfig(v)
+		if !ok {
+			*overwrite = true
+		} else {
+			printSuccess("Config file (" + *config_file + ") is succesfully loaded")
+			printSuccess("tcp_addr: " + addr)
+			printSuccess("threads: " + threads)
+		}
+	}
+	client, addr, threads, err := initConn(addr, threads)
 	if err != nil {
 		printErr(err.Error())
 		os.Exit(1)
@@ -467,6 +535,12 @@ func main() {
 	if err != nil {
 		printErr(err.Error())
 		os.Exit(1)
+	}
+	if *overwrite {
+		err = writeConfig(v, addr, threads)
+		if err != nil {
+			printErr(err.Error())
+		}
 	}
 	err, bytecode, filename, id := connect(client, threads)
 	if err != nil {
