@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"github.com/fatih/color"
+	"github.com/spf13/viper"
 	"io/ioutil"
 	"log"
 	"net"
@@ -340,44 +342,49 @@ func (l *Listener) SendStatus(data Receive, reply *Reply) error {
 	return nil
 }
 
-func initProject() error {
-	Filename = ""
-	printWarn("Please provide the client file")
-	fmt.Print("    ")
-	fmt.Scanln(&Filename)
-	f, err := os.Open(Filename)
+func initProject(client_file string) (error, string) {
+	if *overwrite {
+		Filename = ""
+		printWarn("Please provide the client file")
+		fmt.Print("    ")
+		fmt.Scanln(&Filename)
+		client_file = Filename
+	}
+	f, err := os.Open(client_file)
 	if err != nil {
-		return err
+		return err, ""
 	}
 	defer f.Close()
 	ClientFile, err = ioutil.ReadAll(f)
 	if err != nil {
-		return err
+		return err, ""
 	}
-	_, file := filepath.Split(Filename)
+	_, file := filepath.Split(client_file)
 	Filename = file
 	printSuccess("File is succesfully loaded")
 	WUAttempts = 2
-	return nil
+	return nil, client_file
 }
 
-func initCliConn() (*net.TCPListener, error) {
-	printSuccess("Resolving TCP Address...")
-	printWarn("Please type in the communication port")
-	fmt.Print("    ")
-	port := ""
-	fmt.Scanln(&port)
+func initCliConn(port string) (*net.TCPListener, string, error) {
+	if *overwrite {
+		printSuccess("Resolving TCP Address...")
+		printWarn("Please type in the communication port")
+		fmt.Print("    ")
+		port = ""
+		fmt.Scanln(&port)
+	}
 	address, err := net.ResolveTCPAddr("tcp", "127.0.0.1:"+port)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	in, err := net.ListenTCP("tcp", address)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	listener := new(Listener)
 	rpc.Register(listener)
-	return in, nil
+	return in, port, nil
 }
 
 func processRPC(in *net.TCPListener) {
@@ -417,31 +424,34 @@ func buildServer(filename string) (string, error) {
 	return file_out, nil
 }
 
-func initClientServer() (func() interface{}, error) {
-	filename := ""
-	printWarn("Please provide the server file")
-	fmt.Print("    ")
-	fmt.Scanln(&filename)
-	out, err := buildServer(filename)
+func initClientServer(server_file string) (func() interface{}, string, error) {
+	if *overwrite {
+		filename := ""
+		printWarn("Please provide the server file")
+		fmt.Print("    ")
+		fmt.Scanln(&filename)
+		server_file = filename
+	}
+	out, err := buildServer(server_file)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	plug, err := plugin.Open(out)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	run, err := plug.Lookup("GetServer")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	GetServer := run.(func() interface{})
 	dur, err := plug.Lookup("Timeout")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	tim := dur.(*time.Duration)
 	Timeout = tim
-	return GetServer, nil
+	return GetServer, server_file, nil
 }
 
 func initPluginStruct(GetServer func() interface{}) error {
@@ -514,23 +524,84 @@ func initTicker() *time.Ticker {
 	return tick
 }
 
+func initConfig(config_file string) (string, string, string, *viper.Viper) {
+	v := viper.New()
+	dir, fname := filepath.Split(config_file)
+	if dir == "" {
+		dir = "."
+	}
+	filename := strings.Split(fname, ".")
+	v.SetDefault("ClientFile", "")
+	v.SetDefault("Port", "0")
+	v.SetDefault("ServerFile", "")
+	v.SetConfigName(filename[0])
+	v.SetConfigType(filename[1])
+	v.AddConfigPath(dir)
+	return "", "0", "", v
+}
+
+func readConfig(v *viper.Viper) (string, string, string, bool) {
+	if err := v.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			printErr("Config file not found!")
+			return "", "", "", false
+		}
+		printErr("Could not read from the config file!")
+		return "", "", "", false
+	}
+	client_file := v.GetString("ClientFile")
+	port := v.GetString("Port")
+	server_file := v.GetString("ServerFile")
+	return client_file, port, server_file, true
+}
+
+func writeConfig(v *viper.Viper, client_file, port, server_file, config_file string) error {
+	v.Set("ClientFile", client_file)
+	v.Set("Port", port)
+	v.Set("ServerFile", server_file)
+	err := v.WriteConfigAs(config_file)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+var (
+	config_file = flag.String("config", "panchaea_server.json", "config file location")
+	overwrite   = flag.Bool("n", false, "do not read from the config file")
+)
+
 func main() {
 	logfile, err := initLogger()
 	if err != nil {
 		fmt.Println("[!] " + err.Error())
 		os.Exit(1)
 	}
-	err = initProject()
+	flag.Parse()
+	client_file, port, server_file, v := initConfig(*config_file)
+	ok := true
+	if !*overwrite {
+		client_file, port, server_file, ok = readConfig(v)
+		if !ok {
+			*overwrite = true
+		} else {
+			printSuccess("Config file (" + *config_file + ") is succesfully loaded")
+			printSuccess("client_file: " + client_file)
+			printSuccess("tcp_port: " + port)
+			printSuccess("server_file: " + server_file)
+		}
+	}
+	err, client_file = initProject(client_file)
 	if err != nil {
 		printErr(err.Error())
 		os.Exit(1)
 	}
-	in, err := initCliConn()
+	in, port, err := initCliConn(port)
 	if err != nil {
 		printErr(err.Error())
 		os.Exit(1)
 	}
-	GetServer, err := initClientServer()
+	GetServer, server_file, err := initClientServer(server_file)
 	if err != nil {
 		printErr(err.Error())
 		os.Exit(1)
@@ -539,6 +610,12 @@ func main() {
 	if err != nil {
 		printErr(err.Error())
 		os.Exit(1)
+	}
+	if *overwrite {
+		err = writeConfig(v, client_file, port, server_file, *config_file)
+		if err != nil {
+			printErr(err.Error())
+		}
 	}
 	kill := make(chan bool, 1)
 	initContext(kill)

@@ -20,3 +20,5 @@ server/build/
 client/build/
 
 *.log
+
+*.json
