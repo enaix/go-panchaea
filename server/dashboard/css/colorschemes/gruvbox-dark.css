@@ -1,0 +1,209 @@
+/* Gruvbox colorscheme by morhetz: https://github.com/morhetz/gruvbox */
+
+.c0-bg {
+  /* dark */
+  background-color: #282828;
+}
+
+.c0-fg {
+  /* dark */
+  color: #282828;
+}
+
+.c0-bg-h {
+  /* dark contrast */
+  background-color: #1d2021;
+}
+
+.c0-fg-h {
+  /* dark contrast */
+  color: #1d2021;
+}
+
+.c0-bg-1 {
+  /* dark lighter-1 */
+  background-color: #3c3836;
+}
+
+.c0-fg-1 {
+  /* dark lighter-1 */
+  color: #3c3836;
+}
+
+.c0-bg-2 {
+  /* dark lighter-2 */
+  background-color: #504945;
+}
+
+.c0-fg-2 {
+  /* dark lighter-2 */
+  color: #504945;
+}
+
+.c0-bg-3 {
+  /* dark lighter-3 */
+  background-color: #665c54;
+}
+
+.c0-fg-3 {
+  /* dark lighter-3 */
+  color: #665c54;
+}
+
+.c0-bg-4 {
+  /* dark lighter-4 */
+  background-color: #7c6f64;
+}
+
+.c0-fg-4 {
+  /* dark lighter-4 */
+  color: #7c6f64;
+}
+
+.c0-bg-5 {
+  /* dark lighter-5 */
+  background-color: #928374;
+}
+
+.c0-fg-5 {
+  /* dark lighter-5 */
+  color: #928374;
+}
+
+.c1-fg {
+  /* red */
+  color: #cc241d;
+}
+
+.c2-fg {
+  /* green */
+  color: #98971a;
+}
+
+.c3-fg {
+  /* yellow */
+  color: #d79921;
+}
+
+.c4-fg {
+  /* blue */
+  color: #458588;
+}
+
+.c5-fg {
+  /* purple */
+  color: #b16286;
+}
+
+.c6-fg {
+  /* aqua */
+  color: #689d6a;
+}
+
+.c7-fg {
+  /* gray */
+  color: #a89984;
+}
+
+.c8-bg {
+  /* gray */
+  background-color: #928374;
+}
+
+.c9-bg {
+  /* red */
+  background-color: #fb4934;
+}
+
+.c10-bg {
+  /* green */
+  background-color: #b8bb26;
+}
+
+.c11-bg {
+  /* yellow */
+  background-color: #fabd2f;
+}
+
+.c12-bg {
+  /* blue */
+  background-color: #83a598;
+}
+
+.c13-bg {
+  /* purple */
+  background-color: #d3869b;
+}
+
+.c14-bg {
+  /* aqua */
+  background-color: #8ec07c;
+}
+
+.c15-bg {
+  /* light */
+  background-color: #ebdbb2;
+}
+
+.c15-fg {
+  /* light */
+  color: #ebdbb2;
+}
+
+.c15-bg-h {
+  /* light lighter */
+  background-color: #fbf1c7;
+}
+
+.c15-fg-h {
+  /* light lighter */
+  color: #fbf1c7;
+}
+
+.c15-bg-1 {
+  /* light darker-1 */
+  background-color: #ebdbb2;
+}
+
+.c15-fg-1 {
+  /* light darker-1 */
+  color: #ebdbb2;
+}
+
+.c15-bg-2 {
+  /* light darker-2 */
+  background-color: #d5c4a1;
+}
+
+.c15-fg-2 {
+  /* light darker-2 */
+  color: #d5c4a1;
+}
+
+.c15-bg-3 {
+  /* light darker-3 */
+  background-color: #bdae93;
+}
+
+.c15-fg-3 {
+  /* light darker-3 */
+  color: #bdae93;
+}
+
+.c15-bg-4 {
+  /* light darker-4 */
+  background-color: #a89984;
+}
+
+.c15-fg-4 {
+  /* light darker-4 */
+  color: #a89984;
+}
+
+.c-orange-fg {
+  color: #d65d0e;
+}
+
+.c-orange-bg {
+  background-color: #fe8019;
+}
