@@ -6,8 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/fatih/color"
-	"github.com/spf13/viper"
 	"log"
 	"net/rpc"
 	"os"
@@ -21,6 +19,9 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/fatih/color"
+	"github.com/spf13/viper"
 )
 
 var wg sync.WaitGroup
@@ -29,7 +30,6 @@ var ctx context.Context
 
 var Logger *log.Logger
 
-// TODO add config and log feature
 var WUAttempts int // Max failures for one WU, default 2
 
 type Receive struct {
@@ -315,6 +315,7 @@ func processWU(client *rpc.Client, filename string, thread *Thread, id int) {
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
+		Logger.Println("[E]:    " + err.Error())
 		thread.Status = "failed"
 		rec := Receive{Data: err.Error(), Status: "error " + strconv.Itoa(thread.Id), Id: id}
 		sendBytecode(rec, client)
@@ -322,6 +323,7 @@ func processWU(client *rpc.Client, filename string, thread *Thread, id int) {
 	}
 	res := out.Bytes()
 	if stderr.String() != "" {
+		Logger.Println("[E]:    " + stderr.String())
 		thread.Status = "failed"
 		rec := Receive{Data: stderr.String(), Status: "error " + strconv.Itoa(thread.Id), Id: id}
 		sendBytecode(rec, client)
@@ -330,9 +332,11 @@ func processWU(client *rpc.Client, filename string, thread *Thread, id int) {
 	rec := Receive{Data: strconv.Itoa(thread.Id), Status: "upload", Id: id, Bytecode: res}
 	reply, err := sendBytecode(rec, client)
 	if reply.Data != "ok" {
+		Logger.Println("[E]:    " + reply.Data)
 		printErr(reply.Data)
 	}
 	thread.Status = "ready"
+	Logger.Println("[I]:    " + "WU is processed")
 	return
 }
 
@@ -402,10 +406,12 @@ func handleThreads(client *rpc.Client, id int, filename string) error {
 							printErr("[" + strconv.Itoa(Threads[i].Id) + "] " + err.Error())
 							continue
 						}
+						printSuccess("WU is succesfully downloaded!")
 						Threads[i].Status = "running"
 						go processWU(client, filename, &Threads[i], id)
 					} else if Threads[i].Status == "failed" {
 						if Threads[i].Attempts >= WUAttempts {
+							printErr("WU failed too many times! Fetching new WU...")
 							Threads[i].Attempts = 0
 							err := fetchWU(client, &Threads[i], id)
 							if err != nil {
@@ -417,6 +423,7 @@ func handleThreads(client *rpc.Client, id int, filename string) error {
 							go processWU(client, filename, &Threads[i], id)
 							continue
 						}
+						printErr("Reloading WU due to runtime or download error..")
 						Threads[i].Attempts++
 						err := reloadWU(client, &Threads[i], id)
 						if err != nil {

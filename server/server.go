@@ -30,11 +30,12 @@ var wg sync.WaitGroup
 
 var ctx context.Context
 
-var Logger *log.Logger
+// var Logger *log.Logger
 
 var Timeout *time.Duration
 
-// TODO add config and log feature
+var reg *regexp.Regexp
+
 var WUAttempts int // Max failures for one WU, default 2
 
 type Listener int
@@ -80,25 +81,26 @@ func NewWorkUnit(client *Client, data []byte, thread int) *WorkUnit {
 	wu.Data = data
 	wu.Thread = thread
 	wu.Status = "new"
-	WorkUnits = append(WorkUnits, wu)
+	WorkUnits = append(WorkUnits, &wu)
 	return &wu
 }
 
 func GetWorkUnit(client *Client, thread int) (*WorkUnit, bool) {
-	wu := WorkUnit{}
+	wu := &WorkUnit{}
 	ok := false
 	for i, _ := range WorkUnits {
 		select {
 		case <-ctx.Done():
 			return &WorkUnit{}, false
 		default:
+			// printSuccess(strconv.Itoa(i) + string(WorkUnits[i].Data))
 			if WorkUnits[i].Client.Id == client.Id && WorkUnits[i].Thread == thread {
 				wu = WorkUnits[i]
 				ok = true
 			}
 		}
 	}
-	return &wu, ok
+	return wu, ok
 }
 
 func GetAvailable(client *Client, thread int) (*WorkUnit, bool) {
@@ -113,12 +115,12 @@ func GetAvailable(client *Client, thread int) (*WorkUnit, bool) {
 					printErr("FATAL: WorkUnit exceeded all " + strconv.Itoa(WUAttempts) + " attempt(s)")
 					continue
 				}
-				wu := &WorkUnits[i]
+				wu := *WorkUnits[i]
 				wu.Client = client
 				wu.Thread = thread
 				wu.Status = "new"
 				wu.Attempt++
-				return wu, true
+				return &wu, true
 			} else if WorkUnits[i].Status == "unknown" {
 				if WorkUnits[i].Attempt >= WUAttempts {
 					WorkUnits[i].Status = "dead"
@@ -131,7 +133,7 @@ func GetAvailable(client *Client, thread int) (*WorkUnit, bool) {
 	return &WorkUnit{}, false
 }
 
-var WorkUnits []WorkUnit
+var WorkUnits []*WorkUnit
 
 type Reply struct {
 	Data     string
@@ -156,8 +158,7 @@ type Server interface {
 var serv Server
 
 func isFormatted(s string) bool {
-	re := regexp.MustCompile(`[\[]+(\w|\W)+[\]]+\s*\w*`)
-	if re.FindString(s) == "" {
+	if reg.FindString(s) == "" {
 		return false
 	}
 	return true
@@ -171,7 +172,7 @@ func printErr(err string) {
 		color.New(color.FgRed).Fprintf(os.Stderr, "[!] ")
 		fmt.Println(err)
 	}
-	Logger.Println("[E]:    " + err)
+	log.Println("[E]:    " + err)
 }
 
 func printSuccess(s string) {
@@ -181,7 +182,7 @@ func printSuccess(s string) {
 		color.New(color.FgGreen).Print("[*] ")
 		fmt.Println(s)
 	}
-	Logger.Println("[I]:    " + s)
+	log.Println("[I]:    " + s)
 }
 
 func printWarn(s string) {
@@ -191,7 +192,7 @@ func printWarn(s string) {
 		color.New(color.FgYellow).Print("[*] ")
 		fmt.Println(s)
 	}
-	Logger.Println("[W]:    " + s)
+	log.Println("[W]:    " + s)
 }
 
 func (l *Listener) Init(data Receive, reply *Reply) error {
@@ -235,6 +236,7 @@ func (l *Listener) FetchWorkUnit(data Receive, reply *Reply) error {
 		*reply = Reply{Data: "error", Id: id}
 		return err
 	}
+	printSuccess(data.Data)
 	wu, ok := GetWorkUnit(cli, thread)
 	if !ok {
 		printErr("[" + strconv.Itoa(id) + "] " + "Workunit not found on thread " + strconv.Itoa(thread))
@@ -470,8 +472,11 @@ func initLogger() (*os.File, error) {
 	if err != nil {
 		return f, err
 	}
-	l := log.New(f, "[server]", log.Ltime)
-	Logger = l
+	log.SetOutput(f)
+	log.SetPrefix("[server]")
+	log.SetFlags(log.Ltime)
+	// l := log.New(f, "[server]", log.Ltime)
+	// Logger = l
 	return f, nil
 }
 
@@ -577,6 +582,8 @@ func main() {
 		fmt.Println("[!] " + err.Error())
 		os.Exit(1)
 	}
+	re := regexp.MustCompile(`[\[]+(\w|\W)+[\]]+\s*\w*`)
+	reg = re
 	flag.Parse()
 	client_file, port, server_file, v := initConfig()
 	ok := true
