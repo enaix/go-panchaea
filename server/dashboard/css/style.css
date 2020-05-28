@@ -1,4 +1,6 @@
 .statusbar {
+  position: relative;
+  z-index: 2;
   width: 100%;
   margin: 0;
   margin-left: 0;
@@ -6,6 +8,9 @@
   padding: 0;
   height: 50px;
   background-image: url("../img/pattern.png");
+  -webkit-box-shadow: 0px 5px 10px 0px rgba(0, 0, 0, 0.3);
+  -moz-box-shadow: 0px 5px 10px 0px rgba(0, 0, 0, 0.3);
+  box-shadow: 0px 5px 10px 0px rgba(0, 0, 0, 0.3);
 }
 
 .statusbar-elem {
@@ -28,6 +33,9 @@
 
 .errors-wrapper {
   height: calc(100vh - 50px);
+  -webkit-box-shadow: 5px 0px 10px 0px rgba(0, 0, 0, 0.3);
+  -moz-box-shadow: 5px 0px 10px 0px rgba(0, 0, 0, 0.3);
+  box-shadow: 5px 0px 10px 0px rgba(0, 0, 0, 0.3);
 }
 
 .info-section-header {
@@ -39,6 +47,7 @@
 
 .info-header-wrapper {
   width: max-content;
+  padding-left: 10px;
   padding-right: 10px;
 }
 
@@ -48,6 +57,7 @@
   width: 100%;
   height: 27px;
   border-bottom: 2px solid black;
+    font-family: SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
 }
 
 .info-text {
@@ -72,12 +82,28 @@
 .errors-header {
   font-size: 1.5rem;
   margin: 0;
+  font-family: SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
 }
 
 .errors-container {
   font-size: 1.5rem;
   margin: 0;
   padding-left: 5px;
+  font-family: SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+}
+
+.nodes-wrapper {
+  width: 100%;
+  margin-top: 20px;
+  margin-bottom: 20px;
+  height: 95%;
+  -webkit-box-shadow: 0px 5px 10px 0px rgba(0, 0, 0, 0.3);
+  -moz-box-shadow: 0px 5px 10px 0px rgba(0, 0, 0, 0.3);
+  box-shadow: 0px 5px 10px 0px rgba(0, 0, 0, 0.3);
+}
+
+.svg-controls {
+  margin-right: 10px;
 }
 
 .node {
