@@ -28,6 +28,8 @@ import (
 
 var wg sync.WaitGroup
 
+var mut sync.Mutex
+
 var ctx context.Context
 
 // var Logger *log.Logger
@@ -53,7 +55,9 @@ type Client struct {
 }
 
 func NewClient(id int, status string, threads int) {
+	mut.Lock()
 	Clients = append(Clients, Client{Id: id, Status: status, Threads: threads})
+	mut.Unlock()
 }
 
 func GetClient(id int) (*Client, bool) {
@@ -81,7 +85,9 @@ func NewWorkUnit(client *Client, data []byte, thread int) *WorkUnit {
 	wu.Data = data
 	wu.Thread = thread
 	wu.Status = "new"
+	mut.Lock()
 	WorkUnits = append(WorkUnits, &wu)
+	mut.Unlock()
 	return &wu
 }
 
@@ -111,19 +117,25 @@ func GetAvailable(client *Client, thread int) (*WorkUnit, bool) {
 		default:
 			if WorkUnits[i].Status == "stuck" || WorkUnits[i].Status == "failed" {
 				if WorkUnits[i].Attempt >= WUAttempts {
+					mut.Lock()
 					WorkUnits[i].Status = "dead"
+					mut.Unlock()
 					printErr("FATAL: WorkUnit exceeded all " + strconv.Itoa(WUAttempts) + " attempt(s)")
 					continue
 				}
+				mut.Lock()
 				wu := *WorkUnits[i]
 				wu.Client = client
 				wu.Thread = thread
 				wu.Status = "new"
 				wu.Attempt++
+				mut.Unlock()
 				return &wu, true
 			} else if WorkUnits[i].Status == "unknown" {
 				if WorkUnits[i].Attempt >= WUAttempts {
+					mut.Lock()
 					WorkUnits[i].Status = "dead"
+					mut.Unlock()
 					printErr("FATAL: WorkUnit exceeded all " + strconv.Itoa(WUAttempts) + " attempt(s)")
 					continue
 				}
@@ -243,8 +255,10 @@ func (l *Listener) FetchWorkUnit(data Receive, reply *Reply) error {
 		*reply = Reply{Data: "error", Id: id}
 		return errors.New("Workunit not found")
 	}
+	mut.Lock()
 	wu.Status = "completed"
 	wu.Result = data.Bytecode
+	mut.Unlock()
 	*reply = Reply{Data: "ok", Id: id}
 	return nil
 }
@@ -278,7 +292,9 @@ func (l *Listener) SendWorkUnit(data Receive, reply *Reply) error {
 		printErr(data.Data)
 		return errors.New(data.Data)
 	}
+	mut.Lock()
 	wu.Status = "running"
+	mut.Unlock()
 	*reply = Reply{Data: "ok", Id: id, Bytecode: wu.Data}
 	return nil
 }
@@ -308,8 +324,10 @@ func (l *Listener) ReloadWorkUnit(data Receive, reply *Reply) error {
 		*reply = Reply{Data: "dead", Id: id}
 		return errors.New("Cannot re-upload: too many failed attempts")
 	}
+	mut.Lock()
 	wu.Attempt++
 	wu.Status = "unknown"
+	mut.Unlock()
 	*reply = Reply{Data: "ok", Id: id, Bytecode: wu.Data}
 	return nil
 }
@@ -332,7 +350,9 @@ func (l *Listener) SendStatus(data Receive, reply *Reply) error {
 		printSuccess("Client " + strconv.Itoa(data.Id) + " is ready")
 		cl, ok := GetClient(data.Id)
 		if ok {
+			mut.Lock()
 			cl.Status = "ready"
+			mut.Unlock()
 			*reply = Reply{Data: "ok", Id: data.Id}
 		} else {
 			printErr("[" + strconv.Itoa(data.Id) + "] " + "Client not found!")
