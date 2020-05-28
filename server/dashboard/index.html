@@ -36,24 +36,63 @@
   </div>
   <div class="row main-wrapper">
     <div class="col-3">
+      <div class="info-section-header c0-bg">
+        <div class="row">
+          <div class="col-6">
+            <div class="info-header-wrapper c10-bg">
+              <svg class="bi bi-asterisk" width="1.3rem" height="1.3rem" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path fill-rule="evenodd" d="M8 0a1 1 0 0 1 1 1v5.268l4.562-2.634a1 1 0 1 1 1 1.732L10 8l4.562 2.634a1 1 0 1 1-1 1.732L9 9.732V15a1 1 0 1 1-2 0V9.732l-4.562 2.634a1 1 0 1 1-1-1.732L6 8 1.438 5.366a1 1 0 0 1 1-1.732L7 6.268V1a1 1 0 0 1 1-1z"/>
+              </svg>
+              INFO
+            </div>
+          </div>
+          <div class="col-6 c15-fg" align="right">
+            <svg class="bi bi-arrow-left-short" width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <path fill-rule="evenodd" d="M7.854 4.646a.5.5 0 0 1 0 .708L5.207 8l2.647 2.646a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708l3-3a.5.5 0 0 1 .708 0z"/>
+              <path fill-rule="evenodd" d="M4.5 8a.5.5 0 0 1 .5-.5h6.5a.5.5 0 0 1 0 1H5a.5.5 0 0 1-.5-.5z"/>
+            </svg>
+          </div>
+        </div>
+      </div>
       <div class="errors-wrapper c0-bg">
-        <div class="warnings-header c3-fg c0-bg-1">
-          <svg class="bi bi-caret-right-fill c15-fg" width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12.14 8.753l-5.482 4.796c-.646.566-1.658.106-1.658-.753V3.204a1 1 0 0 1 1.659-.753l5.48 4.796a1 1 0 0 1 0 1.506z"/>
-          </svg>
-          <svg class="bi bi-exclamation-triangle-fill" width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-            <path fill-rule="evenodd" d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5a.905.905 0 0 0-.9.995l.35 3.507a.552.552 0 0 0 1.1 0l.35-3.507A.905.905 0 0 0 8 5zm.002 6a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>
-          </svg>
-          <span class="right-label">warnings</span>
+        <div class="warnings-header c3-fg c0-bg-h">
+          <div class="row">
+            <div class="col-4 align-top">
+              <svg class="bi bi-caret-right-fill c15-fg" width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path d="M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z"/>
+              </svg>
+              <svg class="bi bi-exclamation-triangle-fill" width="1rem" height="1rem" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path fill-rule="evenodd" d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5a.905.905 0 0 0-.9.995l.35 3.507a.552.552 0 0 0 1.1 0l.35-3.507A.905.905 0 0 0 8 5zm.002 6a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>
+              </svg>
+            </div>
+            <div class="col-8 text-truncate" align="right">
+              <span class="info-text"><span id="warnings-count">3</span> WARNINGS</span>
+            </div>
+          </div>
         </div>
         <div class="warnings-container">
-
+          <div class="warning-info text-truncate c3-fg c0-bg-1">[*] Cannot find config file panchaea-client.json</div>
+          <div class="warning-info text-truncate c3-fg c0-bg-0">[1] Thread 3 is stuck</div>
+          <div class="warning-info text-truncate c3-fg c0-bg-1">[1] Thread 2 is stuck</div>
         </div>
-        <div class="errors-header">
-
+        <div class="warnings-header c1-fg c0-bg-h">
+          <div class="row">
+            <div class="col-4 align-top">
+              <svg class="bi bi-caret-right-fill c15-fg" width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path d="M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z"/>
+              </svg>
+              <svg class="bi bi-x-octagon-fill" width="1rem" height="1rem" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path fill-rule="evenodd" d="M11.46.146A.5.5 0 0 0 11.107 0H4.893a.5.5 0 0 0-.353.146L.146 4.54A.5.5 0 0 0 0 4.893v6.214a.5.5 0 0 0 .146.353l4.394 4.394a.5.5 0 0 0 .353.146h6.214a.5.5 0 0 0 .353-.146l4.394-4.394a.5.5 0 0 0 .146-.353V4.893a.5.5 0 0 0-.146-.353L11.46.146zm.394 4.708a.5.5 0 0 0-.708-.708L8 7.293 4.854 4.146a.5.5 0 1 0-.708.708L7.293 8l-3.147 3.146a.5.5 0 0 0 .708.708L8 8.707l3.146 3.147a.5.5 0 0 0 .708-.708L8.707 8l3.147-3.146z"/>
+              </svg>
+            </div>
+            <div class="col-8 text-truncate" align="right">
+              <span class="info-text"><span id="warnings-count">0</span> ERRORS</span>
+            </div>
+          </div>
         </div>
-        <div class="errors-container">
-
+        <div class="warnings-container">
+          <div class="warning-info text-truncate c1-fg c0-bg-1">[!] WorkUnit not found</div>
+          <div class="warning-info text-truncate c1-fg c0-bg-0">[3] Failed to reload WU</div>
         </div>
       </div>
     </div>

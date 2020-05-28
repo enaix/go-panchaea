@@ -23,28 +23,50 @@
 
 .main-wrapper {
   width: 100%;
-  height: 90vh;
+  height: 100%;
 }
 
 .errors-wrapper {
-  height: 100%;
+  height: calc(100vh - 50px);
+}
+
+.info-section-header {
+  font-size: 1.4rem;
+  margin: 0;
+  width: 100%;
+  height: 35px;
+}
+
+.info-header-wrapper {
+  width: max-content;
+  padding-right: 10px;
 }
 
 .warnings-header {
   font-size: 1.2rem;
   margin: 0;
   width: 100%;
-  height: 25px;
+  height: 27px;
+  border-bottom: 2px solid black;
 }
 
-.right-label {
-  margin-left: 40%;
+.info-text {
+  margin-right: 5px;
 }
 
 .warnings-container {
   font-size: 1.5rem;
   margin: 0;
   padding-left: 5px;
+  border-bottom: 2px solid black;
+}
+
+.warning-info {
+  font-size: 1rem;
+  margin: 0;
+  width: 100%;
+  height: 25px;
+  font-family: SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
 }
 
 .errors-header {
