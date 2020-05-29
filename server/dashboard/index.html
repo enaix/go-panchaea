@@ -71,14 +71,14 @@
                 </svg>
               </div>
               <div class="col-8 text-truncate" align="right">
-                <span class="info-text"><span id="warnings-count">3</span> WARNINGS</span>
+                <span class="info-text"><span id="warnings-count">{{ warningsCount }}</span> WARNINGS</span>
               </div>
             </div>
           </div>
           <div class="warnings-container" v-bind:class="{hide: isWarningsCollapsed}">
-            <div class="warning-info text-truncate c3-fg c0-bg-1">[*] Cannot find config file panchaea-client.json</div>
-            <div class="warning-info text-truncate c3-fg c0-bg-0">[1] Thread 3 is stuck</div>
-            <div class="warning-info text-truncate c3-fg c0-bg-1">[1] Thread 2 is stuck</div>
+            <div v-for="(warn, index) in warnings" :key="warn">
+              <div class="warning-info text-truncate c3-fg" v-bind:class="[isEven(index) ? 'c0-bg-1' : '', 'c0-bg-0']">{{ warn }}</div>
+            </div>
           </div>
           <div class="warnings-header c1-fg c0-bg-h" v-on:click="isErrorsCollapsed=!isErrorsCollapsed">
             <div class="row">
@@ -94,13 +94,14 @@
                 </svg>
               </div>
               <div class="col-8 text-truncate" align="right">
-                <span class="info-text"><span id="warnings-count">2</span> ERRORS</span>
+                <span class="info-text"><span id="warnings-count">{{ errorsCount }}</span> ERRORS</span>
               </div>
             </div>
           </div>
           <div class="warnings-container" v-bind:class="{hide: isErrorsCollapsed}">
-            <div class="warning-info text-truncate c1-fg c0-bg-1">[!] WorkUnit not found</div>
-            <div class="warning-info text-truncate c1-fg c0-bg-0">[3] Failed to reload WU</div>
+            <div v-for="(error, index) in errors" :key="error">
+              <div class="warning-info text-truncate c1-fg" v-bind:class="[isEven(index) ? 'c0-bg-1' : '', 'c0-bg-0']">{{ error }}</div>
+            </div>
           </div>
         </div>
       </div>
