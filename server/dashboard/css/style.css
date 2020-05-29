@@ -106,6 +106,21 @@
   margin-right: 10px;
 }
 
+.nodes-container-wrapper {
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+
 .node {
-  padding-left: 15px;
+  width: 200px;
+  height: 200px;
+  margin-left: 25px;
+  font-size: 3rem;
+  -webkit-box-shadow: 0px 5px 10px 0px rgba(0, 0, 0, 0.3);
+  -moz-box-shadow: 0px 5px 10px 0px rgba(0, 0, 0, 0.3);
+  box-shadow: 0px 5px 10px 0px rgba(0, 0, 0, 0.3);
+}
+
+.node-wrapper {
+  padding: 10px;
 }
