@@ -125,6 +125,7 @@
               </div>
             </div>
           </div>
+          <node v-for="node in nodes" v-bind:client="node" v-bind:key="node.id"></node>
           <div class="row nodes-container-wrapper">
             <div class="col-4" align="center">
               <div class="node c0-bg-h c15-fg">
