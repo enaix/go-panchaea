@@ -12,6 +12,7 @@
   <script src="js/popper.min.js"></script>
   <script src="js/bootstrap.min.js"></script>
   <script src="js/vue.js"></script>
+  <script src="js/vue_toasted.js"></script>
 </head>
 <body class="c0-bg-h">
   <div id="dashboard">
@@ -77,7 +78,7 @@
           </div>
           <div class="warnings-container" v-bind:class="{hide: isWarningsCollapsed}">
             <div v-for="(warn, index) in warnings" :key="warn">
-              <div class="warning-info text-truncate c3-fg" v-bind:class="[isEven(index) ? 'c0-bg-1' : '', 'c0-bg-0']">{{ warn }}</div>
+              <div class="warning-info text-truncate c3-fg" v-bind:class="[isEven(index) ? 'c0-bg-1' : '', 'c0-bg-0']" v-bind:title="warn">{{ warn }}</div>
             </div>
           </div>
           <div class="warnings-header c1-fg c0-bg-h" v-on:click="isErrorsCollapsed=!isErrorsCollapsed">
@@ -100,7 +101,7 @@
           </div>
           <div class="warnings-container" v-bind:class="{hide: isErrorsCollapsed}">
             <div v-for="(error, index) in errors" :key="error">
-              <div class="warning-info text-truncate c1-fg" v-bind:class="[isEven(index) ? 'c0-bg-1' : '', 'c0-bg-0']">{{ error }}</div>
+              <div class="warning-info text-truncate c1-fg" v-bind:class="[isEven(index) ? 'c0-bg-1' : '', 'c0-bg-0']" v-bind:title="error">{{ error }}</div>
             </div>
           </div>
         </div>
