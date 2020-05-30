@@ -3,14 +3,17 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"github.com/fatih/color"
 	"github.com/spf13/viper"
+	"html"
 	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
 	"net/rpc"
 	"os"
 	"os/exec"
@@ -50,7 +53,7 @@ var Filename string
 
 type Client struct {
 	Id      int
-	Status  string
+	Status  string // "ready", "running", "failed"
 	Threads int
 }
 
@@ -169,6 +172,20 @@ type Server interface {
 
 var serv Server
 
+type APIResponse struct {
+	Warnings  []string
+	Errors    []string
+	Status    string
+	Clients   *[]Client
+	WorkUnits []*WorkUnit
+}
+
+var apiresp APIResponse
+
+var Warnings []string
+
+var Errors []string
+
 func isFormatted(s string) bool {
 	if reg.FindString(s) == "" {
 		return false
@@ -180,9 +197,12 @@ func printErr(err string) {
 	if isFormatted(err) {
 		color.New(color.FgRed).Fprintf(os.Stderr, err)
 		fmt.Println()
+		Errors = append(Errors, err)
 	} else {
 		color.New(color.FgRed).Fprintf(os.Stderr, "[!] ")
 		fmt.Println(err)
+		mut.Lock()
+		Errors = append(Errors, "[!] "+err)
 	}
 	log.Println("[E]:    " + err)
 }
@@ -200,9 +220,11 @@ func printSuccess(s string) {
 func printWarn(s string) {
 	if isFormatted(s) {
 		color.Yellow(s)
+		Warnings = append(Warnings, s)
 	} else {
 		color.New(color.FgYellow).Print("[*] ")
 		fmt.Println(s)
+		Warnings = append(Warnings, "[!] "+s)
 	}
 	log.Println("[W]:    " + s)
 }
@@ -344,7 +366,7 @@ func (l *Listener) SendStatus(data Receive, reply *Reply) error {
 			printErr(err.Error())
 			threads = 1
 		}
-		NewClient(id, "connected", threads)
+		NewClient(id, "ready", threads)
 		*reply = Reply{Data: "ok", Id: id}
 	} else if data.Status == "ready" {
 		printSuccess("Client " + strconv.Itoa(data.Id) + " is ready")
@@ -359,6 +381,10 @@ func (l *Listener) SendStatus(data Receive, reply *Reply) error {
 			*reply = Reply{Data: "client not found", Id: data.Id}
 		}
 	} else if data.Status == "error" {
+		cl, ok := GetClient(data.Id)
+		if ok {
+			cl.Status = "failed"
+		}
 		printErr("[" + strconv.Itoa(data.Id) + "] " + data.Data)
 	}
 	return nil
@@ -549,7 +575,7 @@ func initTicker() *time.Ticker {
 	return tick
 }
 
-func initConfig() (string, string, string, *viper.Viper) {
+func initConfig() (string, string, string, string, *viper.Viper) {
 	v := viper.New()
 	dir, fname := filepath.Split(*config_file)
 	if dir == "" {
@@ -559,36 +585,86 @@ func initConfig() (string, string, string, *viper.Viper) {
 	v.SetDefault("ClientFile", "")
 	v.SetDefault("Port", "0")
 	v.SetDefault("ServerFile", "")
+	v.SetDefault("DashboardPort", "0")
 	v.SetConfigName(filename[0])
 	v.SetConfigType(filename[1])
 	v.AddConfigPath(dir)
-	return "", "0", "", v
+	return "", "0", "", "0", v
 }
 
-func readConfig(v *viper.Viper) (string, string, string, bool) {
+func readConfig(v *viper.Viper) (string, string, string, string, bool) {
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			printErr("Config file not found!")
-			return "", "", "", false
+			return "", "", "", "", false
 		}
 		printErr("Could not read from the config file!")
-		return "", "", "", false
+		return "", "", "", "", false
 	}
 	client_file := v.GetString("ClientFile")
 	port := v.GetString("Port")
 	server_file := v.GetString("ServerFile")
-	return client_file, port, server_file, true
+	dashboard_port := v.GetString("DashboardPort")
+	return client_file, port, server_file, dashboard_port, true
 }
 
-func writeConfig(v *viper.Viper, client_file, port, server_file string) error {
+func writeConfig(v *viper.Viper, client_file, port, server_file, dashboard_port string) error {
 	v.Set("ClientFile", client_file)
 	v.Set("Port", port)
 	v.Set("ServerFile", server_file)
+	v.Set("DashboardPort", dashboard_port)
 	err := v.WriteConfigAs(*config_file)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+func initDashboard(port string) string {
+	if *overwrite {
+		port = ""
+		printWarn("Please provide the web dashboard port")
+		fmt.Print("    ")
+		fmt.Scanln(&port)
+	}
+	fs := http.FileServer(http.Dir("./dashboard"))
+	http.Handle("/", fs)
+	return port
+}
+
+func initAPI() {
+	apiresp = APIResponse{Warnings: Warnings, Errors: Errors, Clients: &Clients, WorkUnits: WorkUnits}
+}
+
+func updateAPI() {
+	warn := Warnings
+	err := Errors
+	for i, _ := range warn {
+		warn[i] = html.EscapeString(warn[i])
+	}
+	for i, _ := range err {
+		err[i] = html.EscapeString(err[i])
+	}
+	apiresp.Warnings = warn
+	apiresp.Errors = err
+	Warnings = []string{}
+	Errors = []string{}
+}
+
+func handleAPI(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	updateAPI()
+	/* res, err := json.Marshal(apiresp)
+	if err != nil {
+		printErr(err.Error())
+	} */
+	json.NewEncoder(w).Encode(&apiresp)
+}
+
+func handleDashboard(port string) {
+	defer wg.Done()
+	err := http.ListenAndServe(":"+port, nil)
+	printErr(err.Error())
 }
 
 var (
@@ -605,10 +681,10 @@ func main() {
 	re := regexp.MustCompile(`[\[]+(\w|\W)+[\]]+\s*\w*`)
 	reg = re
 	flag.Parse()
-	client_file, port, server_file, v := initConfig()
+	client_file, port, server_file, dashboard_port, v := initConfig()
 	ok := true
 	if !*overwrite {
-		client_file, port, server_file, ok = readConfig(v)
+		client_file, port, server_file, dashboard_port, ok = readConfig(v)
 		if !ok {
 			*overwrite = true
 		} else {
@@ -616,6 +692,7 @@ func main() {
 			printSuccess("client_file: " + client_file)
 			printSuccess("tcp_port: " + port)
 			printSuccess("server_file: " + server_file)
+			printSuccess("dashboard_port: " + dashboard_port)
 		}
 	}
 	err, client_file = initProject(client_file)
@@ -638,8 +715,9 @@ func main() {
 		printErr(err.Error())
 		os.Exit(1)
 	}
+	dashboard_port = initDashboard(dashboard_port)
 	if *overwrite {
-		err = writeConfig(v, client_file, port, server_file)
+		err = writeConfig(v, client_file, port, server_file, dashboard_port)
 		if err != nil {
 			printErr(err.Error())
 		}
@@ -650,6 +728,7 @@ func main() {
 	go handleInterrupt(kill, in)
 	go handleCleanExit(logfile)
 	wg.Add(2)
+	go handleDashboard(dashboard_port)
 	go handleClients(t)
 	go processRPC(in)
 	wg.Wait()

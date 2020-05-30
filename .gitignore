@@ -22,3 +22,5 @@ client/build/
 *.log
 
 *.json
+
+node-modules

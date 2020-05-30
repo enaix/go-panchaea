@@ -8,7 +8,9 @@ Vue.use(Toasted, {
   duration: 10000,
 })
 
-Vue.component('node', {
+Vue.use(axios)
+
+Vue.component('node-component', {
   props: ['client'],
   template: `
   <div class="node c0-bg-h c15-fg">
@@ -55,7 +57,13 @@ var app = new Vue({
     errorsCount: 2,
     errorIcon: '<svg class="bi bi-asterisk c1-fg" width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M8 0a1 1 0 0 1 1 1v5.268l4.562-2.634a1 1 0 1 1 1 1.732L10 8l4.562 2.634a1 1 0 1 1-1 1.732L9 9.732V15a1 1 0 1 1-2 0V9.732l-4.562 2.634a1 1 0 1 1-1-1.732L6 8 1.438 5.366a1 1 0 0 1 1-1.732L7 6.268V1a1 1 0 0 1 1-1z"/></svg>',
     warningIcon: '<svg class="bi bi-asterisk c3-fg" width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M8 0a1 1 0 0 1 1 1v5.268l4.562-2.634a1 1 0 1 1 1 1.732L10 8l4.562 2.634a1 1 0 1 1-1 1.732L9 9.732V15a1 1 0 1 1-2 0V9.732l-4.562 2.634a1 1 0 1 1-1-1.732L6 8 1.438 5.366a1 1 0 0 1 1-1.732L7 6.268V1a1 1 0 0 1 1-1z"/></svg>',
-    nodes: [{id: 0, threads: 0, status: 'ready', statusColor: 'c3-fg', load: 1, isRunning: false}]
+    nodes: [
+      {id: 0, threads: 4, status: 'ready', statusColor: 'c3-fg', load: 1, isRunning: false},
+      {id: 1, threads: 2, status: 'running', statusColor: 'c2-fg', load: 4, isRunning: true}
+    ],
+    workUnits: [
+      {client_id: 0, thread: 1, time: "", status: "", attempt: 0}
+    ]
   },
   methods: {
     isEven: function (a) {
@@ -71,5 +79,36 @@ var app = new Vue({
       this.errorsCount = this.errors.length
       Vue.toasted.show(this.errorIcon + " " + err)
     },
+  },
+  mounted() {
+    axios
+      .get('/api')
+      .then(response => {
+        this.warnings.push(response.Warnings)
+        this.errors.push(response.Errors)
+        this.status.push(response.status)
+        for (let i = 0; i < response.Clients.length; i++) {
+          nodes = []
+          color = 'c3-fg'
+          running = false
+          switch(response.Clients[i].Status) {
+            case 'ready':
+              color = 'c3-fg'
+              break
+            case 'running':
+              color = 'c2-fg'
+              running = true
+              break
+            case 'failed':
+              color = 'c1-fg'
+              break
+          }
+          this.nodes.push({id: response.Clients[i].Id, threads: response.Clients[i].Threads, status: response.Clients[i].Status, statusColor: color, load: 1, isRunning: running})
+        }
+        for (let i = 0; i < response.WorkUnits.length; i++) {
+          id = this.workUnits.Client.Id
+          this.workUnits.push({client_id: id, thread: response.WorkUnits[i].Thread, time: "", status: response.WorkUnits[i].Status, attempt: response.WorkUnits[i].Attempt})
+        }
+      })
   }
 })
