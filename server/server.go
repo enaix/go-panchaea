@@ -545,9 +545,13 @@ func handleInterrupt(kill chan bool, lis *net.TCPListener) {
 	close(kill)
 }
 
-func handleCleanExit(f *os.File) {
+func handleCleanExit(f *os.File, webserver *http.Server) {
 	<-ctx.Done()
 	f.Close()
+	// err := webserver.Shutdown(ctx)
+	// if err != nil {
+	// 	printErr(err.Error())
+	// }
 }
 
 func handleClients(tick *time.Ticker) {
@@ -620,7 +624,7 @@ func writeConfig(v *viper.Viper, client_file, port, server_file, dashboard_port 
 	return nil
 }
 
-func initDashboard(port string) string {
+func initDashboard(port string) (string, *http.Server) {
 	if *overwrite {
 		port = ""
 		printWarn("Please provide the web dashboard port")
@@ -629,7 +633,8 @@ func initDashboard(port string) string {
 	}
 	fs := http.FileServer(http.Dir("./dashboard"))
 	http.Handle("/", fs)
-	return port
+	webserver := &http.Server{Addr: ":" + port, Handler: fs}
+	return port, webserver
 }
 
 func initAPI() {
@@ -661,10 +666,12 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(&apiresp)
 }
 
-func handleDashboard(port string) {
+func handleDashboard(webserver *http.Server) {
 	defer wg.Done()
-	err := http.ListenAndServe(":"+port, nil)
-	printErr(err.Error())
+	err := webserver.ListenAndServe()
+	if err != nil {
+		printErr(err.Error())
+	}
 }
 
 var (
@@ -715,7 +722,7 @@ func main() {
 		printErr(err.Error())
 		os.Exit(1)
 	}
-	dashboard_port = initDashboard(dashboard_port)
+	dashboard_port, webserver := initDashboard(dashboard_port)
 	if *overwrite {
 		err = writeConfig(v, client_file, port, server_file, dashboard_port)
 		if err != nil {
@@ -726,9 +733,9 @@ func main() {
 	initContext(kill)
 	t := initTicker()
 	go handleInterrupt(kill, in)
-	go handleCleanExit(logfile)
+	go handleCleanExit(logfile, webserver)
 	wg.Add(2)
-	go handleDashboard(dashboard_port)
+	go handleDashboard(webserver)
 	go handleClients(t)
 	go processRPC(in)
 	wg.Wait()
