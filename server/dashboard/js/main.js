@@ -49,43 +49,62 @@ var app = new Vue({
       axios
       .get('api')
       .then(resp => {
-	console.log(resp)
 	response = resp.data
 	if (response.WorkUnits == null) {
 		return
 	}
 	for (let i = 0; i < response.Warnings.length; i++) {
 		this.newWarning(response.Warnings[i])
+		if (i > 30) {
+		  break
+		}
 	}
 	for (let i = 0; i < response.Errors.length; i++) {
 		this.newError(response.Errors[i])
+		if (i > 30) {
+		  break
+		}
 	}
         this.status = response.status
-        for (let i = 0; i < response.Clients.length; i++) {
-          nodes = []
+        stColor = "c11-bg c0-fg"
+	switch(this.status) {
+            case 'FAILED':
+              stColor = 'c9-bg c0-fg'
+              break
+            case 'RUNNING':
+              stColor = 'c10-bg c0-fg'
+              running = true
+              break
+            case 'READY':
+              stColor = 'c11-bg c0-fg'
+              break
+        }
+	this.statusWrapperColor = stColor
+	for (let i = 0; i < response.Clients.length; i++) {
           color = 'c3-fg'
           running = false
           switch(response.Clients[i].Status) {
-            case 'READY':
+            case 'ready':
               color = 'c3-fg'
               break
-            case 'RUNNING':
+            case 'running':
               color = 'c2-fg'
               running = true
               break
-            case 'FAILED':
+            case 'failed':
               color = 'c1-fg'
               break
           }
           this.nodes = {id: response.Clients[i].Id, threads: response.Clients[i].Threads, status: response.Clients[i].Status, statusColor: color, load: 1, isRunning: running}
         }
-        for (let i = 0; i < response.WorkUnits.length; i++) {
+        /* for (let i = 0; i < response.WorkUnits.length; i++) {
           id = this.workUnits.Client.Id
           this.workUnits.push({client_id: id, thread: response.WorkUnits[i].Thread, time: "", status: response.WorkUnits[i].Status, attempt: response.WorkUnits[i].Attempt})
-        }
+        }*/
       })
       .catch(error => {
       	this.status = "OFFLINE"
+	this
 	if (this.errors[this.errors.length - 1].message != error.message) {
 	  this.newError(error.message)
 	}
