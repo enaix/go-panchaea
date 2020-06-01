@@ -8,7 +8,7 @@ Vue.use(Toasted, {
   duration: 10000,
 })
 
-Vue.use(axios)
+// Vue.use(axios)
 
 var app = new Vue({
   el: '#dashboard',
@@ -45,36 +45,55 @@ var app = new Vue({
       this.errorsCount = this.errors.length
       Vue.toasted.show(this.errorIcon + " " + err)
     },
-  },
- /* mounted() {
-    axios
-      .get('/api')
-      .then(response => {
-        this.warnings.push(response.Warnings)
-        this.errors.push(response.Errors)
-        this.status.push(response.status)
+    getData: function () {
+      axios
+      .get('api')
+      .then(resp => {
+	console.log(resp)
+	response = resp.data
+	if (response.WorkUnits == null) {
+		return
+	}
+	for (let i = 0; i < response.Warnings.length; i++) {
+		this.newWarning(response.Warnings[i])
+	}
+	for (let i = 0; i < response.Errors.length; i++) {
+		this.newError(response.Errors[i])
+	}
+        this.status = response.status
         for (let i = 0; i < response.Clients.length; i++) {
           nodes = []
           color = 'c3-fg'
           running = false
           switch(response.Clients[i].Status) {
-            case 'ready':
+            case 'READY':
               color = 'c3-fg'
               break
-            case 'running':
+            case 'RUNNING':
               color = 'c2-fg'
               running = true
               break
-            case 'failed':
+            case 'FAILED':
               color = 'c1-fg'
               break
           }
-          this.nodes.push({id: response.Clients[i].Id, threads: response.Clients[i].Threads, status: response.Clients[i].Status, statusColor: color, load: 1, isRunning: running})
+          this.nodes = {id: response.Clients[i].Id, threads: response.Clients[i].Threads, status: response.Clients[i].Status, statusColor: color, load: 1, isRunning: running}
         }
         for (let i = 0; i < response.WorkUnits.length; i++) {
           id = this.workUnits.Client.Id
           this.workUnits.push({client_id: id, thread: response.WorkUnits[i].Thread, time: "", status: response.WorkUnits[i].Status, attempt: response.WorkUnits[i].Attempt})
         }
       })
-  }*/
+      .catch(error => {
+      	this.status = "OFFLINE"
+	if (this.errors[this.errors.length - 1].message != error.message) {
+	  this.newError(error.message)
+	}
+      })
+    setTimeout(this.getData, 1000)
+    }
+  },
+ mounted() {
+     this.getData()
+ }
 })

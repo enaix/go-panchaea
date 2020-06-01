@@ -51,6 +51,8 @@ var ClientFile []byte
 
 var Filename string
 
+var Status string
+
 type Client struct {
 	Id      int
 	Status  string // "ready", "running", "failed"
@@ -562,12 +564,18 @@ func handleClients(tick *time.Ticker) {
 			tick.Stop()
 			return
 		default:
+			ok := false
 			for i, _ := range WorkUnits {
 				if WorkUnits[i].Status == "running" || WorkUnits[i].Status == "stuck" {
 					WorkUnits[i].Time.Add(time.Second)
+					Status = "RUNNING"
+					ok = true
 				}
 				if WorkUnits[i].Time.After(next.Add(*Timeout)) {
 					WorkUnits[i].Status = "stuck"
+				}
+				if !ok {
+					Status = "FAILED"
 				}
 			}
 		}
@@ -624,19 +632,6 @@ func writeConfig(v *viper.Viper, client_file, port, server_file, dashboard_port 
 	return nil
 }
 
-func initDashboard(port string) (string, *http.Server) {
-	if *overwrite {
-		port = ""
-		printWarn("Please provide the web dashboard port")
-		fmt.Print("    ")
-		fmt.Scanln(&port)
-	}
-	fs := http.FileServer(http.Dir("./dashboard"))
-	http.Handle("/", fs)
-	webserver := &http.Server{Addr: ":" + port, Handler: fs}
-	return port, webserver
-}
-
 func initAPI() {
 	apiresp = APIResponse{Warnings: Warnings, Errors: Errors, Clients: &Clients, WorkUnits: WorkUnits}
 }
@@ -652,6 +647,8 @@ func updateAPI() {
 	}
 	apiresp.Warnings = warn
 	apiresp.Errors = err
+	apiresp.WorkUnits = WorkUnits
+	apiresp.Status = Status
 	Warnings = []string{}
 	Errors = []string{}
 }
@@ -664,6 +661,23 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		printErr(err.Error())
 	} */
 	json.NewEncoder(w).Encode(&apiresp)
+}
+
+func initDashboard(port string) (string, *http.Server) {
+	if *overwrite {
+		port = ""
+		printWarn("Please provide the web dashboard port")
+		fmt.Print("    ")
+		fmt.Scanln(&port)
+	}
+	fs := http.FileServer(http.Dir("./dashboard"))
+	// http.Handle("/", fs)
+	// http.HandleFunc("/api", handleAPI)
+	mux := http.NewServeMux()
+	mux.Handle("/", fs)
+	mux.HandleFunc("/api", handleAPI)
+	webserver := &http.Server{Handler: mux, Addr: ":" + port}
+	return port, webserver
 }
 
 func handleDashboard(webserver *http.Server) {
@@ -722,6 +736,7 @@ func main() {
 		printErr(err.Error())
 		os.Exit(1)
 	}
+	initAPI()
 	dashboard_port, webserver := initDashboard(dashboard_port)
 	if *overwrite {
 		err = writeConfig(v, client_file, port, server_file, dashboard_port)
@@ -729,6 +744,7 @@ func main() {
 			printErr(err.Error())
 		}
 	}
+	Status = "READY"
 	kill := make(chan bool, 1)
 	initContext(kill)
 	t := initTicker()
