@@ -65,7 +65,7 @@ var app = new Vue({
 		  break
 		}
 	}
-        this.status = response.status
+        this.status = response.Status
         stColor = "c11-bg c0-fg"
 	switch(this.status) {
             case 'FAILED':
@@ -80,6 +80,7 @@ var app = new Vue({
               break
         }
 	this.statusWrapperColor = stColor
+	this.nodes = []
 	for (let i = 0; i < response.Clients.length; i++) {
           color = 'c3-fg'
           running = false
@@ -95,7 +96,7 @@ var app = new Vue({
               color = 'c1-fg'
               break
           }
-          this.nodes = {id: response.Clients[i].Id, threads: response.Clients[i].Threads, status: response.Clients[i].Status, statusColor: color, load: 1, isRunning: running}
+          this.nodes.push({id: response.Clients[i].Id, threads: response.Clients[i].Threads, status: response.Clients[i].Status, statusColor: color, load: 1, isRunning: running})
         }
         /* for (let i = 0; i < response.WorkUnits.length; i++) {
           id = this.workUnits.Client.Id

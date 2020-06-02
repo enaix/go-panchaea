@@ -28,6 +28,7 @@
   font-size: 2rem;
   height: 50px;
   width: min-content;
+  min-width: 150px;
 }
 
 .main-wrapper {
@@ -63,7 +64,7 @@
   width: 100%;
   height: 27px;
   border-bottom: 2px solid black;
-    font-family: SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+  font-family: SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
 }
 
 .info-text {

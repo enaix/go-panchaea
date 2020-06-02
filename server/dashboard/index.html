@@ -79,7 +79,7 @@
             </div>
           </div>
           <div class="warnings-container" v-bind:class="{hide: isWarningsCollapsed}">
-            <div v-for="(warn, index) in warnings" :key="warn">
+            <div v-for="(warn, index) in warnings" :key="index">
               <div class="warning-info text-truncate c3-fg" v-bind:class="[isEven(index) ? 'c0-bg-1' : '', 'c0-bg-0']" v-bind:title="warn">{{ warn }}</div>
             </div>
           </div>
@@ -102,7 +102,7 @@
             </div>
           </div>
           <div class="warnings-container" v-bind:class="{hide: isErrorsCollapsed}">
-            <div v-for="(error, index) in errors" :key="error">
+            <div v-for="(error, index) in errors" :key="index">
               <div class="warning-info text-truncate c1-fg" v-bind:class="[isEven(index) ? 'c0-bg-1' : '', 'c0-bg-0']" v-bind:title="error">{{ error }}</div>
             </div>
           </div>
