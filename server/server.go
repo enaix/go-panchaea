@@ -322,6 +322,7 @@ func Finish() error {
 	}
 	var ok, run, stuck, fail int
 	res := make([][]byte, 0)
+	Status = "FINISH"
 	for i := range WorkUnits {
 		res = append(res, WorkUnits[i].Result)
 		switch WorkUnits[i].Status { // "new", "running", "completed", "stuck", "failed", "unknown", "dead"
@@ -905,7 +906,7 @@ func main() {
 	t := initTicker()
 	go handleInterrupt(kill, in)
 	go handleCleanExit(logfile, webserver)
-	wg.Add(3)
+	wg.Add(4)
 	go handleDashboard(webserver)
 	go handleClients(t)
 	go processRPC(in)
