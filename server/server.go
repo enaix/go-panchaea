@@ -36,7 +36,7 @@ var mut sync.Mutex
 
 var ctx context.Context
 
-// Timeout before the workunit is consIDered to be stuck
+// Timeout before the workunit is considered to be stuck
 var Timeout *time.Duration
 
 var reg *regexp.Regexp
@@ -500,7 +500,7 @@ func buildServer(filename string) (string, error) {
 func initClientServer(server_file string) (func() interface{}, string, error) {
 	if *overwrite {
 		filename := ""
-		printWarn("Please provIDe the server file")
+		printWarn("Please provide the server file")
 		fmt.Print("    ")
 		fmt.Scanln(&filename)
 		server_file = filename
@@ -689,7 +689,7 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 func initDashboard(port string) (string, *http.Server) {
 	if *overwrite {
 		port = ""
-		printWarn("Please provIDe the web dashboard port")
+		printWarn("Please provide the web dashboard port")
 		fmt.Print("    ")
 		fmt.Scanln(&port)
 	}
