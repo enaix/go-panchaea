@@ -7,8 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/fatih/color"
-	"github.com/spf13/viper"
 	"html"
 	"io/ioutil"
 	"log"
@@ -27,6 +25,9 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/fatih/color"
+	"github.com/spf13/viper"
 )
 
 var wg sync.WaitGroup
@@ -35,45 +36,54 @@ var mut sync.Mutex
 
 var ctx context.Context
 
-// var Logger *log.Logger
-
+// Timeout before the workunit is consIDered to be stuck
 var Timeout *time.Duration
 
 var reg *regexp.Regexp
 
-var WUAttempts int // Max failures for one WU, default 2
+// WUAttempts declares max failures for one WU, default 2
+var WUAttempts int
 
+// Listener RPC (int?)
 type Listener int
 
+// Clients contains connected clients
 var Clients []Client
 
+// ClientFile stores the code to be sent to the clients
 var ClientFile []byte
 
+// Filename of the code file
 var Filename string
 
+// Status of the server (ready, running, failed)
 var Status string
 
+// Client represents connected client (node)
 type Client struct {
-	Id      int
+	ID      int
 	Status  string // "ready", "running", "failed"
 	Threads int
 }
 
-func NewClient(id int, status string, threads int) {
+// NewClient registers a new connected client
+func NewClient(ID int, status string, threads int) {
 	mut.Lock()
-	Clients = append(Clients, Client{Id: id, Status: status, Threads: threads})
+	Clients = append(Clients, Client{ID: ID, Status: status, Threads: threads})
 	mut.Unlock()
 }
 
-func GetClient(id int) (*Client, bool) {
+// GetClient returns the client by ID
+func GetClient(ID int) (*Client, bool) {
 	for i := range Clients {
-		if Clients[i].Id == id {
+		if Clients[i].ID == ID {
 			return &Clients[i], true
 		}
 	}
 	return nil, false
 }
 
+// WorkUnit represents registered WU
 type WorkUnit struct {
 	Data    []byte
 	Client  *Client
@@ -84,6 +94,7 @@ type WorkUnit struct {
 	Result  []byte
 }
 
+// NewWorkUnit registers a new WU
 func NewWorkUnit(client *Client, data []byte, thread int) *WorkUnit {
 	var wu WorkUnit
 	wu.Client = client
@@ -96,16 +107,16 @@ func NewWorkUnit(client *Client, data []byte, thread int) *WorkUnit {
 	return &wu
 }
 
+// GetWorkUnit returns the WU by the client and its thread
 func GetWorkUnit(client *Client, thread int) (*WorkUnit, bool) {
 	wu := &WorkUnit{}
 	ok := false
-	for i, _ := range WorkUnits {
+	for i := range WorkUnits {
 		select {
 		case <-ctx.Done():
 			return &WorkUnit{}, false
 		default:
-			// printSuccess(strconv.Itoa(i) + string(WorkUnits[i].Data))
-			if WorkUnits[i].Client.Id == client.Id && WorkUnits[i].Thread == thread {
+			if WorkUnits[i].Client.ID == client.ID && WorkUnits[i].Thread == thread {
 				wu = WorkUnits[i]
 				ok = true
 			}
@@ -114,8 +125,9 @@ func GetWorkUnit(client *Client, thread int) (*WorkUnit, bool) {
 	return wu, ok
 }
 
+// GetAvailable returns available WU and assigns it to the client
 func GetAvailable(client *Client, thread int) (*WorkUnit, bool) {
-	for i, _ := range WorkUnits {
+	for i := range WorkUnits {
 		select {
 		case <-ctx.Done():
 			return &WorkUnit{}, false
@@ -150,30 +162,35 @@ func GetAvailable(client *Client, thread int) (*WorkUnit, bool) {
 	return &WorkUnit{}, false
 }
 
+// WorkUnits contains all WUs
 var WorkUnits []*WorkUnit
 
+// Reply contains data to be sent to a client
 type Reply struct {
 	Data     string
-	Id       int
+	ID       int
 	Bytecode []byte
 }
 
+// Receive contains data to be fetched from a client
 type Receive struct {
 	Data     string
 	Status   string
-	Id       int
+	ID       int
 	Bytecode []byte
 }
 
+// Server represents the reflection of the plugin's Server struct
 type Server interface {
 	Init()
-	Run(id int) ([]byte, error)
+	Run(ID int) ([]byte, error)
 	Prepare(amount int) error
 	Process(res [][]byte) error
 }
 
 var serv Server
 
+// APIResponse contains data to be sent to the dashboard
 type APIResponse struct {
 	Warnings  []string
 	Errors    []string
@@ -184,8 +201,10 @@ type APIResponse struct {
 
 var apiresp APIResponse
 
+// Warnings contains warnings to be sent to the dashboard
 var Warnings []string
 
+// Errors contains errors to be sent to the dashboard
 var Errors []string
 
 func isFormatted(s string) bool {
@@ -231,22 +250,24 @@ func printWarn(s string) {
 	log.Println("[W]:    " + s)
 }
 
+// Init sends the ClientFile to a client
 func (l *Listener) Init(data Receive, reply *Reply) error {
 	if len(ClientFile) == 0 {
 		printErr("No client file provided")
-		*reply = Reply{Data: "error", Id: data.Id}
+		*reply = Reply{Data: "error", ID: data.ID}
 		return errors.New("No input file provided")
 	}
-	*reply = Reply{Data: Filename, Id: data.Id, Bytecode: ClientFile}
+	*reply = Reply{Data: Filename, ID: data.ID, Bytecode: ClientFile}
 	return nil
 }
 
+// FetchWorkUnit gets the completed WU from a client
 func (l *Listener) FetchWorkUnit(data Receive, reply *Reply) error {
-	id := data.Id
-	cli, ok := GetClient(id)
+	ID := data.ID
+	cli, ok := GetClient(ID)
 	if !ok {
-		printErr("[" + strconv.Itoa(id) + "] " + "Client not found!")
-		*reply = Reply{Data: "client not found", Id: id}
+		printErr("[" + strconv.Itoa(ID) + "] " + "Client not found!")
+		*reply = Reply{Data: "client not found", ID: ID}
 		return errors.New("Client not found")
 	}
 	if data.Status != "upload" {
@@ -255,139 +276,141 @@ func (l *Listener) FetchWorkUnit(data Receive, reply *Reply) error {
 			printErr(err.Error())
 			return err
 		}
-		printErr("[" + strconv.Itoa(id) + "] " + data.Data)
+		printErr("[" + strconv.Itoa(ID) + "] " + data.Data)
 		wu, ok := GetWorkUnit(cli, thread)
 		if !ok {
-			printErr("[" + strconv.Itoa(id) + "] " + "Error not found! Cannot compute")
-			*reply = Reply{Data: "error", Id: id}
+			printErr("[" + strconv.Itoa(ID) + "] " + "Error not found! Cannot compute")
+			*reply = Reply{Data: "error", ID: ID}
 			return errors.New("Cannot compute")
 		}
 		wu.Status = "failed"
-		*reply = Reply{Data: "error", Id: id}
+		*reply = Reply{Data: "error", ID: ID}
 		return errors.New(data.Data)
 	}
 	thread, err := strconv.Atoi(data.Data)
 	if err != nil {
 		printErr(err.Error())
-		*reply = Reply{Data: "error", Id: id}
+		*reply = Reply{Data: "error", ID: ID}
 		return err
 	}
-	printSuccess(data.Data)
 	wu, ok := GetWorkUnit(cli, thread)
 	if !ok {
-		printErr("[" + strconv.Itoa(id) + "] " + "Workunit not found on thread " + strconv.Itoa(thread))
-		*reply = Reply{Data: "error", Id: id}
+		printErr("[" + strconv.Itoa(ID) + "] " + "Workunit not found on thread " + strconv.Itoa(thread))
+		*reply = Reply{Data: "error", ID: ID}
 		return errors.New("Workunit not found")
 	}
 	mut.Lock()
 	wu.Status = "completed"
 	wu.Result = data.Bytecode
 	mut.Unlock()
-	*reply = Reply{Data: "ok", Id: id}
+	*reply = Reply{Data: "ok", ID: ID}
 	return nil
 }
 
+// SendWorkUnit sends the WU to a client
 func (l *Listener) SendWorkUnit(data Receive, reply *Reply) error {
-	id := data.Id
-	cli, ok := GetClient(id)
+	ID := data.ID
+	cli, ok := GetClient(ID)
 	if !ok {
-		printErr("[" + strconv.Itoa(id) + "] " + "Client not found!")
-		*reply = Reply{Data: "client not found", Id: id}
+		printErr("[" + strconv.Itoa(ID) + "] " + "Client not found!")
+		*reply = Reply{Data: "client not found", ID: ID}
 		return errors.New("Client not found")
 	}
 	thread, err := strconv.Atoi(data.Data)
 	if err != nil {
 		printErr(err.Error())
-		*reply = Reply{Data: "error", Id: id}
+		*reply = Reply{Data: "error", ID: ID}
 		return err
 	}
 	wu, ok := GetAvailable(cli, thread)
 	if !ok {
-		work, err := serv.Run(id)
+		work, err := serv.Run(ID)
 		if err != nil {
 			printErr(err.Error())
-			*reply = Reply{Data: "error", Id: id}
+			*reply = Reply{Data: "error", ID: ID}
 			return err
 		}
 		wu = NewWorkUnit(cli, work, thread)
 	}
 	if data.Status == "error" {
-		*reply = Reply{Data: "error", Id: id}
+		*reply = Reply{Data: "error", ID: ID}
 		printErr(data.Data)
 		return errors.New(data.Data)
 	}
 	mut.Lock()
 	wu.Status = "running"
 	mut.Unlock()
-	*reply = Reply{Data: "ok", Id: id, Bytecode: wu.Data}
+	*reply = Reply{Data: "ok", ID: ID, Bytecode: wu.Data}
 	return nil
 }
 
+// ReloadWorkUnit sends the WU again if necessary
 func (l *Listener) ReloadWorkUnit(data Receive, reply *Reply) error {
-	id := data.Id
-	cli, ok := GetClient(id)
+	ID := data.ID
+	cli, ok := GetClient(ID)
 	if !ok {
-		printErr("[" + strconv.Itoa(id) + "] " + "Client not found!")
-		*reply = Reply{Data: "client not found", Id: id}
+		printErr("[" + strconv.Itoa(ID) + "] " + "Client not found!")
+		*reply = Reply{Data: "client not found", ID: ID}
 		return errors.New("Client not found")
 	}
 	thread, err := strconv.Atoi(data.Data)
 	if err != nil {
 		printErr(err.Error())
-		*reply = Reply{Data: "error", Id: id}
+		*reply = Reply{Data: "error", ID: ID}
 		return err
 	}
 	wu, ok := GetWorkUnit(cli, thread)
 	if !ok {
-		printErr("[" + strconv.Itoa(id) + "] " + "Cannot re-upload: no such WU!")
-		*reply = Reply{Data: "no such wu", Id: id}
+		printErr("[" + strconv.Itoa(ID) + "] " + "Cannot re-upload: no such WU!")
+		*reply = Reply{Data: "no such wu", ID: ID}
 		return errors.New("Cannot re-upload: no such WU")
 	}
 	if wu.Attempt >= WUAttempts || wu.Status == "dead" {
-		printErr("[" + strconv.Itoa(id) + "] " + "Cannot re-upload: too many failed attempts!")
-		*reply = Reply{Data: "dead", Id: id}
+		printErr("[" + strconv.Itoa(ID) + "] " + "Cannot re-upload: too many failed attempts!")
+		*reply = Reply{Data: "dead", ID: ID}
 		return errors.New("Cannot re-upload: too many failed attempts")
 	}
 	mut.Lock()
 	wu.Attempt++
 	wu.Status = "unknown"
 	mut.Unlock()
-	*reply = Reply{Data: "ok", Id: id, Bytecode: wu.Data}
+	*reply = Reply{Data: "ok", ID: ID, Bytecode: wu.Data}
 	return nil
 }
 
+// SendStatus gets client's status
 func (l *Listener) SendStatus(data Receive, reply *Reply) error {
 	if data.Status == "hello" {
-		id := data.Id
-		if id == -1 {
-			id = len(Clients) + 1
+		ID := data.ID
+		if ID == -1 {
+			ID = len(Clients) + 1
 		}
-		printSuccess("Client " + strconv.Itoa(id) + " is connected")
+		printSuccess("Client " + strconv.Itoa(ID) + " is connected")
 		threads, err := strconv.Atoi(data.Data)
 		if err != nil {
 			printErr(err.Error())
 			threads = 1
 		}
-		NewClient(id, "ready", threads)
-		*reply = Reply{Data: "ok", Id: id}
+		NewClient(ID, "ready", threads)
+		*reply = Reply{Data: "ok", ID: ID}
 	} else if data.Status == "ready" {
-		printSuccess("Client " + strconv.Itoa(data.Id) + " is ready")
-		cl, ok := GetClient(data.Id)
+		printSuccess("Client " + strconv.Itoa(data.ID) + " is ready")
+		cl, ok := GetClient(data.ID)
 		if ok {
 			mut.Lock()
 			cl.Status = "ready"
 			mut.Unlock()
-			*reply = Reply{Data: "ok", Id: data.Id}
+			*reply = Reply{Data: "ok", ID: data.ID}
 		} else {
-			printErr("[" + strconv.Itoa(data.Id) + "] " + "Client not found!")
-			*reply = Reply{Data: "client not found", Id: data.Id}
+			printErr("[" + strconv.Itoa(data.ID) + "] " + "Client not found!")
+			*reply = Reply{Data: "client not found", ID: data.ID}
 		}
 	} else if data.Status == "error" {
-		cl, ok := GetClient(data.Id)
+		cl, ok := GetClient(data.ID)
 		if ok {
 			cl.Status = "failed"
 		}
-		printErr("[" + strconv.Itoa(data.Id) + "] " + data.Data)
+		printErr("[" + strconv.Itoa(data.ID) + "] " + data.Data)
 	}
 	return nil
 }
@@ -477,7 +500,7 @@ func buildServer(filename string) (string, error) {
 func initClientServer(server_file string) (func() interface{}, string, error) {
 	if *overwrite {
 		filename := ""
-		printWarn("Please provide the server file")
+		printWarn("Please provIDe the server file")
 		fmt.Print("    ")
 		fmt.Scanln(&filename)
 		server_file = filename
@@ -565,7 +588,7 @@ func handleClients(tick *time.Ticker) {
 			return
 		default:
 			ok := false
-			for i, _ := range WorkUnits {
+			for i := range WorkUnits {
 				if WorkUnits[i].Status == "running" || WorkUnits[i].Status == "stuck" {
 					WorkUnits[i].Time.Add(time.Second)
 					Status = "RUNNING"
@@ -639,10 +662,10 @@ func initAPI() {
 func updateAPI() {
 	warn := Warnings
 	err := Errors
-	for i, _ := range warn {
+	for i := range warn {
 		warn[i] = html.EscapeString(warn[i])
 	}
-	for i, _ := range err {
+	for i := range err {
 		err[i] = html.EscapeString(err[i])
 	}
 	apiresp.Warnings = warn
@@ -666,7 +689,7 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 func initDashboard(port string) (string, *http.Server) {
 	if *overwrite {
 		port = ""
-		printWarn("Please provide the web dashboard port")
+		printWarn("Please provIDe the web dashboard port")
 		fmt.Print("    ")
 		fmt.Scanln(&port)
 	}
