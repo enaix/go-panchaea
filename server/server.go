@@ -470,13 +470,17 @@ func buildServer(filename string) (string, error) {
 	flag := "-o"
 	output := "build.so"
 	goexec, err := exec.LookPath("go")
+	debugParam := ""
 	if err != nil {
 		return "", err
 	}
 	if runtime.GOOS == "windows" {
 		return "", errors.New("FATAL: Windows does not support Go Plugins!")
 	}
-	cmd := exec.Command(goexec, "build", flag, filepath.Join("build", output), "-buildmode=plugin", filename)
+	if *debug {
+		debugParam = "-gcflags='all=-N -l'"
+	}
+	cmd := exec.Command(goexec, "build", flag, filepath.Join("build", output), "-buildmode=plugin", debugParam, filename)
 	fmt.Println(cmd)
 	file_out := filepath.Join("build", output)
 	var out, stderr bytes.Buffer
@@ -500,7 +504,7 @@ func buildServer(filename string) (string, error) {
 func initClientServer(server_file string) (func() interface{}, string, error) {
 	if *overwrite {
 		filename := ""
-		printWarn("Please provIDe the server file")
+		printWarn("Please provide the server file")
 		fmt.Print("    ")
 		fmt.Scanln(&filename)
 		server_file = filename
@@ -546,8 +550,6 @@ func initLogger() (*os.File, error) {
 	log.SetOutput(f)
 	log.SetPrefix("[server]")
 	log.SetFlags(log.Ltime)
-	// l := log.New(f, "[server]", log.Ltime)
-	// Logger = l
 	return f, nil
 }
 
@@ -679,10 +681,6 @@ func updateAPI() {
 func handleAPI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	updateAPI()
-	/* res, err := json.Marshal(apiresp)
-	if err != nil {
-		printErr(err.Error())
-	} */
 	json.NewEncoder(w).Encode(&apiresp)
 }
 
@@ -694,8 +692,6 @@ func initDashboard(port string) (string, *http.Server) {
 		fmt.Scanln(&port)
 	}
 	fs := http.FileServer(http.Dir("./dashboard"))
-	// http.Handle("/", fs)
-	// http.HandleFunc("/api", handleAPI)
 	mux := http.NewServeMux()
 	mux.Handle("/", fs)
 	mux.HandleFunc("/api", handleAPI)
@@ -714,6 +710,7 @@ func handleDashboard(webserver *http.Server) {
 var (
 	config_file = flag.String("config", "panchaea_server.json", "config file location")
 	overwrite   = flag.Bool("n", false, "do not read from the config file")
+	debug       = flag.Bool("d", false, "delve debug support for plugins")
 )
 
 func main() {
