@@ -24,8 +24,8 @@ var app = new Vue({
     errorIcon: '<svg class="bi bi-asterisk c1-fg" width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M8 0a1 1 0 0 1 1 1v5.268l4.562-2.634a1 1 0 1 1 1 1.732L10 8l4.562 2.634a1 1 0 1 1-1 1.732L9 9.732V15a1 1 0 1 1-2 0V9.732l-4.562 2.634a1 1 0 1 1-1-1.732L6 8 1.438 5.366a1 1 0 0 1 1-1.732L7 6.268V1a1 1 0 0 1 1-1z"/></svg>',
     warningIcon: '<svg class="bi bi-asterisk c3-fg" width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M8 0a1 1 0 0 1 1 1v5.268l4.562-2.634a1 1 0 1 1 1 1.732L10 8l4.562 2.634a1 1 0 1 1-1 1.732L9 9.732V15a1 1 0 1 1-2 0V9.732l-4.562 2.634a1 1 0 1 1-1-1.732L6 8 1.438 5.366a1 1 0 0 1 1-1.732L7 6.268V1a1 1 0 0 1 1-1z"/></svg>',
     nodes: [
-      {id: 0, threads: 4, status: 'ready', statusColor: 'c3-fg', load: 1, isRunning: false},
-      {id: 1, threads: 2, status: 'running', statusColor: 'c2-fg', load: 4, isRunning: true}
+      {id: 0, threads: 4, status: 'ready', statusColor: 'c3-fg', load: "&#960" + "1" + ";", isRunning: false},
+      {id: 1, threads: 2, status: 'running', statusColor: 'c2-fg', load: "&#960" + "4" + ";", isRunning: true}
     ],
     workUnits: [
       {client_id: 0, thread: 1, time: "", status: "", attempt: 0}
@@ -96,7 +96,7 @@ var app = new Vue({
               color = 'c1-fg'
               break
           }
-          this.nodes.push({id: response.Clients[i].Id, threads: response.Clients[i].Threads, status: response.Clients[i].Status, statusColor: color, load: 1, isRunning: running})
+          this.nodes.push({id: response.Clients[i].Id, threads: response.Clients[i].Threads, status: response.Clients[i].Status, statusColor: color, load: "&#960" + "1" + ";", isRunning: running})
         }
         /* for (let i = 0; i < response.WorkUnits.length; i++) {
           id = this.workUnits.Client.Id
