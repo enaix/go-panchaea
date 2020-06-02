@@ -59,6 +59,8 @@ var Filename string
 // Status of the server (ready, running, failed)
 var Status string
 
+var finished chan bool
+
 // Client represents connected client (node)
 type Client struct {
 	ID      int
@@ -261,6 +263,118 @@ func (l *Listener) Init(data Receive, reply *Reply) error {
 	return nil
 }
 
+// Finish preapres WUs result and calls the Prepare server function
+func Finish() error {
+	tick := 0
+	printSuccess("Waiting for the clients to finish WUs...")
+	for {
+		select {
+		case <-ctx.Done():
+			printErr("Writing WUs data to the log, please do not abort the process")
+			for i := range WorkUnits {
+				log.Println("[E] Not completed WU, id: " + strconv.Itoa(i) + "; please re-run it manually")
+				log.Println("---------------[start JSON data]---------------")
+				log.Println(string(WorkUnits[i].Data))
+				log.Println("----------------[end JSON data]----------------")
+				log.Println("---------------[start JSON result]---------------")
+				log.Println(string(WorkUnits[i].Result))
+				log.Println("----------------[end JSON result]----------------")
+			}
+			return errors.New("Finishing process is terminated by the user!")
+		default:
+			computing := 0
+			stuck := 0
+			for i := range Clients {
+				if Clients[i].Status == "running" {
+					computing++
+				} else if Clients[i].Status == "stuck" || Clients[i].Status == "unknown" {
+					stuck++
+				}
+			}
+			tick++
+			if computing == 0 {
+				if stuck != 0 {
+					tmp := ""
+					printWarn("There are " + strconv.Itoa(stuck) + " stuck clients, ignore and finish the job? [Y/n]")
+					fmt.Print("    ")
+					fmt.Scanln(&tmp)
+					if tmp == "n" || tmp == "N" {
+						continue
+					} else {
+						break
+					}
+				}
+				break
+			}
+			if tick%100 == 0 {
+				tmp := ""
+				printWarn("Clients may be stuck, ignore and finish the job? [y/N]")
+				fmt.Print("    ")
+				fmt.Scanln(&tmp)
+				if tmp == "y" || tmp == "Y" {
+					break
+				} else {
+					continue
+				}
+			}
+			time.Sleep(time.Second)
+		}
+	}
+	var ok, run, stuck, fail int
+	res := make([][]byte, 0)
+	for i := range WorkUnits {
+		res = append(res, WorkUnits[i].Result)
+		switch WorkUnits[i].Status { // "new", "running", "completed", "stuck", "failed", "unknown", "dead"
+		case "completed":
+			ok++
+		case "new":
+			log.Println("[E] Not completed WU, id: " + strconv.Itoa(i) + "; please re-run it manually")
+			log.Println("---------------[start JSON data]---------------")
+			log.Println(string(WorkUnits[i].Data))
+			log.Println("----------------[end JSON data]----------------")
+			run++
+		case "running":
+			log.Println("[E] Not completed WU, id: " + strconv.Itoa(i) + "; please re-run it manually")
+			log.Println("---------------[start JSON data]---------------")
+			log.Println(string(WorkUnits[i].Data))
+			log.Println("----------------[end JSON data]----------------")
+			run++
+		case "stuck":
+			log.Println("[E] Stuck WU, id: " + strconv.Itoa(i) + "; please re-run it manually")
+			log.Println("---------------[start JSON data]---------------")
+			log.Println(string(WorkUnits[i].Data))
+			log.Println("----------------[end JSON data]----------------")
+			stuck++
+		case "failed":
+			log.Println("[E] Failed WU, id: " + strconv.Itoa(i) + "; please re-run it manually")
+			log.Println("---------------[start JSON data]---------------")
+			log.Println(string(WorkUnits[i].Data))
+			log.Println("----------------[end JSON data]----------------")
+			fail++
+		case "unknown":
+			log.Println("[E] Failed WU, id: " + strconv.Itoa(i) + "; please re-run it manually")
+			log.Println("---------------[start JSON data]---------------")
+			log.Println(string(WorkUnits[i].Data))
+			log.Println("----------------[end JSON data]----------------")
+			fail++
+		case "dead":
+			log.Println("[E] Failed WU, id: " + strconv.Itoa(i) + "; please re-run it manually")
+			log.Println("---------------[start JSON data]---------------")
+			log.Println(string(WorkUnits[i].Data))
+			log.Println("----------------[end JSON data]----------------")
+			fail++
+		}
+	}
+	printWarn("WARN: " + strconv.Itoa(ok) + " WUs completed, " + strconv.Itoa(run) + " in process, " + strconv.Itoa(stuck) + " stuck and " + strconv.Itoa(fail) + " failed.")
+	printWarn("Failed WUs info will appear in the log file")
+	err := serv.Process(res)
+	if err != nil {
+		printErr(err.Error())
+		return err
+	}
+	return nil
+}
+
 // FetchWorkUnit gets the completed WU from a client
 func (l *Listener) FetchWorkUnit(data Receive, reply *Reply) error {
 	ID := data.ID
@@ -326,7 +440,8 @@ func (l *Listener) SendWorkUnit(data Receive, reply *Reply) error {
 	if !ok {
 		work, err := serv.Run(ID)
 		if err != nil {
-			printErr(err.Error())
+			printErr(err.Error()) // No more WUs, finishing...
+			finished <- true
 			*reply = Reply{Data: "error", ID: ID}
 			return err
 		}
@@ -478,9 +593,9 @@ func buildServer(filename string) (string, error) {
 		return "", errors.New("FATAL: Windows does not support Go Plugins!")
 	}
 	if *debug {
-		debugParam = "-gcflags='all=-N -l'"
+		debugParam = " -gcflags='all=-N -l'"
 	}
-	cmd := exec.Command(goexec, "build", flag, filepath.Join("build", output), "-buildmode=plugin", debugParam, filename)
+	cmd := exec.Command(goexec, "build", flag, filepath.Join("build", output), "-buildmode=plugin"+debugParam, filename)
 	fmt.Println(cmd)
 	file_out := filepath.Join("build", output)
 	var out, stderr bytes.Buffer
@@ -575,10 +690,29 @@ func handleInterrupt(kill chan bool, lis *net.TCPListener) {
 func handleCleanExit(f *os.File, webserver *http.Server) {
 	<-ctx.Done()
 	f.Close()
+	printErr("Writing WUs data to the log, please do not abort the process")
+	for i := range WorkUnits {
+		log.Println("[E] Not completed WU, id: " + strconv.Itoa(i) + "; please re-run it manually")
+		log.Println("---------------[start JSON data]---------------")
+		log.Println(string(WorkUnits[i].Data))
+		log.Println("----------------[end JSON data]----------------")
+		log.Println("---------------[start JSON result]---------------")
+		log.Println(string(WorkUnits[i].Result))
+		log.Println("----------------[end JSON result]----------------")
+	}
+	close(finished)
 	// err := webserver.Shutdown(ctx)
 	// if err != nil {
 	// 	printErr(err.Error())
 	// }
+}
+func handleFinish() {
+	defer wg.Done()
+	<-finished
+	err := Finish()
+	if err != nil {
+		printErr(err.Error())
+	}
 }
 
 func handleClients(tick *time.Ticker) {
@@ -766,13 +900,15 @@ func main() {
 	}
 	Status = "READY"
 	kill := make(chan bool, 1)
+	finished = make(chan bool, 1)
 	initContext(kill)
 	t := initTicker()
 	go handleInterrupt(kill, in)
 	go handleCleanExit(logfile, webserver)
-	wg.Add(2)
+	wg.Add(3)
 	go handleDashboard(webserver)
 	go handleClients(t)
 	go processRPC(in)
+	go handleFinish()
 	wg.Wait()
 }
