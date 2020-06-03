@@ -688,24 +688,32 @@ func handleInterrupt(kill chan bool, lis *net.TCPListener) {
 	close(kill)
 }
 
-func handleCleanExit(f *os.File, webserver *http.Server) {
-	<-ctx.Done()
-	f.Close()
-	printErr("Writing WUs data to the log, please do not abort the process")
-	for i := range WorkUnits {
-		log.Println("[E] Not completed WU, id: " + strconv.Itoa(i) + "; please re-run it manually")
-		log.Println("---------------[start JSON data]---------------")
-		log.Println(string(WorkUnits[i].Data))
-		log.Println("----------------[end JSON data]----------------")
-		log.Println("---------------[start JSON result]---------------")
-		log.Println(string(WorkUnits[i].Result))
-		log.Println("----------------[end JSON result]----------------")
+func handleCleanExit(kill chan bool, f *os.File, webserver *http.Server) {
+	<-kill
+	tmp := ""
+	printWarn("[!] Dump WUs data to the log (" + strconv.Itoa(len(WorkUnits)*7) + " lines)? [Y/n]")
+	fmt.Print("    ")
+	fmt.Scanln(&tmp)
+	if tmp == "n" || tmp == "N" {
+		printSuccess("Exiting...")
+	} else {
+		printErr("Writing WUs data to the log, please do not abort the process")
+		for i := range WorkUnits {
+			log.Println("[E] Not completed WU, id: " + strconv.Itoa(i) + "; please re-run it manually")
+			log.Println("---------------[start JSON data]---------------")
+			log.Println(string(WorkUnits[i].Data))
+			log.Println("----------------[end JSON data]----------------")
+			log.Println("---------------[start JSON result]---------------")
+			log.Println(string(WorkUnits[i].Result))
+			log.Println("----------------[end JSON result]----------------")
+		}
 	}
+	f.Close()
 	close(finished)
-	// err := webserver.Shutdown(ctx)
-	// if err != nil {
-	// 	printErr(err.Error())
-	// }
+	err := webserver.Shutdown(ctx)
+	if err != nil {
+		printErr(err.Error())
+	}
 }
 func handleFinish() {
 	defer wg.Done()
@@ -905,7 +913,7 @@ func main() {
 	initContext(kill)
 	t := initTicker()
 	go handleInterrupt(kill, in)
-	go handleCleanExit(logfile, webserver)
+	go handleCleanExit(kill, logfile, webserver)
 	wg.Add(4)
 	go handleDashboard(webserver)
 	go handleClients(t)
