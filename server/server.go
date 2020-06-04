@@ -224,7 +224,6 @@ func printErr(err string) {
 	} else {
 		color.New(color.FgRed).Fprintf(os.Stderr, "[!] ")
 		fmt.Println(err)
-		mut.Lock()
 		Errors = append(Errors, "[!] "+err)
 	}
 	log.Println("[E]:    " + err)
