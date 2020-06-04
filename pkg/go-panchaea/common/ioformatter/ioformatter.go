@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"regexp"
 	"github.com/fatih/color"
 )
@@ -14,6 +15,10 @@ var Warnings []string
 var Errors []string
 
 var Reg *regexp.Regexp
+
+var Log *log.Logger
+
+var mut *sync.Mutex
 
 func IsFormatted(s string) bool {
 	if Reg.FindString(s) == "" {
@@ -26,13 +31,19 @@ func PrintErr(err string) {
 	if IsFormatted(err) {
 		color.New(color.FgRed).Fprintf(os.Stderr, err)
 		fmt.Println()
+		mut.Lock()
 		Errors = append(Errors, err)
+		mut.Unlock()
 	} else {
 		color.New(color.FgRed).Fprintf(os.Stderr, "[!] ")
 		fmt.Println(err)
+		mut.Lock()
 		Errors = append(Errors, "[!] "+err)
+		mut.Unlock()
 	}
-	log.Println("[E]:    " + err)
+	mut.Lock()
+	Log.Println("[E]:    " + err)
+	mut.Unlock()
 }
 
 func PrintSuccess(s string) {
@@ -42,19 +53,27 @@ func PrintSuccess(s string) {
 		color.New(color.FgGreen).Print("[*] ")
 		fmt.Println(s)
 	}
-	log.Println("[I]:    " + s)
+	mut.Lock()
+	Log.Println("[I]:    " + s)
+	mut.Unlock()
 }
 
 func PrintWarn(s string) {
 	if IsFormatted(s) {
 		color.Yellow(s)
+		mut.Lock()
 		Warnings = append(Warnings, s)
+		mut.Unlock()
 	} else {
 		color.New(color.FgYellow).Print("[*] ")
 		fmt.Println(s)
+		mut.Lock()
 		Warnings = append(Warnings, "[!] "+s)
+		mut.Unlock()
 	}
-	log.Println("[W]:    " + s)
+	mut.Lock()
+	Log.Println("[W]:    " + s)
+	mut.Unlock()
 }
 
 func initLogger(filename, prefix string) (*os.File, error) {
@@ -62,9 +81,7 @@ func initLogger(filename, prefix string) (*os.File, error) {
 	if err != nil {
 		return f, err
 	}
-	log.SetOutput(f)
-	log.SetPrefix(prefix)
-	log.SetFlags(log.Ltime)
+	Log = log.New(f, prefix, log.Ltime)
 	return f, nil
 }
 
@@ -72,9 +89,9 @@ func initFormatter() {
 	Reg = regexp.MustCompile(`[\[]+(\w|\W)+[\]]+\s*\w*`)
 }
 
-func Init(filename, prefix string) (*os.File, error) {
+func Init(filename, prefix string, mutex *sync.Mutex) (*os.File, error) {
+	mut = mutex
 	initFormatter()
 	return initLogger(filename, prefix)
 }
-
 
