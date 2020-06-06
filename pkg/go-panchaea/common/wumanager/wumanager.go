@@ -36,21 +36,21 @@ func GetClient(ID int) (*Client, bool) {
 }
 
 type Thread struct {
-	ID int
-	Status string
+	ID        int
+	Status    string
 	WorkUnits []*WorkUnit
 }
 
 func NewThreads(amount int) []*Thread {
 	res := make([]*Thread, amount)
-	for i := range(res) {
+	for i := range res {
 		res[i] = &Thread{ID: i + 1, Status: "ready"}
 	}
 	return res
 }
 
 func GetThread(client *Client, ID int) (*Thread, bool) {
-	for i := range(client.Threads) {
+	for i := range client.Threads {
 		if client.Threads[i].ID == ID {
 			return client.Threads[i], true
 		}
@@ -80,7 +80,9 @@ func NewWorkUnit(client *Client, data []byte, thread int) *WorkUnit {
 	return &wu
 }
 
-func GetWorkUnit(thread *Thread) *WorkUnit {
-	return thread.WorkUnits[len(thread.WorkUnits) - 1]
+func GetWorkUnit(thread *Thread) (*WorkUnit, bool) {
+	if len(thread.WorkUnits) == 0 {
+		return &WorkUnit{}, false
+	}
+	return thread.WorkUnits[len(thread.WorkUnits)-1], true
 }
-

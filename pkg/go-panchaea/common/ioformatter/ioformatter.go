@@ -2,11 +2,11 @@ package ioformatter
 
 import (
 	"fmt"
+	"github.com/fatih/color"
 	"log"
 	"os"
-	"sync"
 	"regexp"
-	"github.com/fatih/color"
+	"sync"
 )
 
 var Warnings []string
@@ -35,10 +35,10 @@ func PrintErr(err string) {
 		Errors = append(Errors, err)
 		mut.Unlock()
 	} else {
-		color.New(color.FgRed).Fprintf(os.Stderr, "[!] ")
-		fmt.Println(err)
+		color.New(color.BgRed).Add(color.FgWhite).Fprintf(os.Stderr, " ERROR ")
+		fmt.Println(" " + err)
 		mut.Lock()
-		Errors = append(Errors, "[!] "+err)
+		Errors = append(Errors, err)
 		mut.Unlock()
 	}
 	mut.Lock()
@@ -50,8 +50,8 @@ func PrintSuccess(s string) {
 	if IsFormatted(s) {
 		color.Green(s)
 	} else {
-		color.New(color.FgGreen).Print("[*] ")
-		fmt.Println(s)
+		color.New(color.BgGreen).Add(color.FgWhite).Print(" INFO ")
+		fmt.Println(" " + s)
 	}
 	mut.Lock()
 	Log.Println("[I]:    " + s)
@@ -65,10 +65,10 @@ func PrintWarn(s string) {
 		Warnings = append(Warnings, s)
 		mut.Unlock()
 	} else {
-		color.New(color.FgYellow).Print("[*] ")
-		fmt.Println(s)
+		color.New(color.BgYellow).Add(color.FgBlack).Print(" WARN ")
+		fmt.Println(" " + s)
 		mut.Lock()
-		Warnings = append(Warnings, "[!] "+s)
+		Warnings = append(Warnings, s)
 		mut.Unlock()
 	}
 	mut.Lock()
@@ -94,4 +94,3 @@ func Init(filename, prefix string, mutex *sync.Mutex) (*os.File, error) {
 	initFormatter()
 	return initLogger(filename, prefix)
 }
-
