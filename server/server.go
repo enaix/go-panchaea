@@ -209,7 +209,7 @@ var Warnings []string
 // Errors contains errors to be sent to the dashboard
 var Errors []string
 
-func isFormatted(s string) bool {
+func IsFormatted(s string) bool {
 	if reg.FindString(s) == "" {
 		return false
 	}
@@ -217,38 +217,52 @@ func isFormatted(s string) bool {
 }
 
 func printErr(err string) {
-	if isFormatted(err) {
-		color.New(color.FgRed).Fprintf(os.Stderr, err)
-		fmt.Println()
-		Errors = append(Errors, err)
-	} else {
-		color.New(color.FgRed).Fprintf(os.Stderr, "[!] ")
-		fmt.Println(err)
-		Errors = append(Errors, "[!] "+err)
-	}
-	log.Println("[E]:    " + err)
+        if IsFormatted(err) {
+                color.New(color.FgRed).Fprintf(os.Stderr, err)
+                fmt.Println()
+                mut.Lock()
+                Errors = append(Errors, err)
+                mut.Unlock()
+        } else {
+                color.New(color.BgRed).Add(color.FgWhite).Fprintf(os.Stderr, " FAIL ")
+                fmt.Println(" " + err)
+                mut.Lock()
+                Errors = append(Errors, err)
+                mut.Unlock()
+        }
+        mut.Lock()
+        log.Println("[E]:    " + err)
+        mut.Unlock()
 }
 
 func printSuccess(s string) {
-	if isFormatted(s) {
-		color.Green(s)
-	} else {
-		color.New(color.FgGreen).Print("[*] ")
-		fmt.Println(s)
-	}
-	log.Println("[I]:    " + s)
+        if IsFormatted(s) {
+                color.Green(s)
+        } else {
+                color.New(color.BgGreen).Add(color.FgBlack).Print(" INFO ")
+                fmt.Println(" " + s)
+        }
+        mut.Lock()
+        log.Println("[I]:    " + s)
+        mut.Unlock()
 }
 
 func printWarn(s string) {
-	if isFormatted(s) {
-		color.Yellow(s)
-		Warnings = append(Warnings, s)
-	} else {
-		color.New(color.FgYellow).Print("[*] ")
-		fmt.Println(s)
-		Warnings = append(Warnings, "[!] "+s)
-	}
-	log.Println("[W]:    " + s)
+        if IsFormatted(s) {
+                color.Yellow(s)
+                mut.Lock()
+                Warnings = append(Warnings, s)
+                mut.Unlock()
+        } else {
+                color.New(color.BgYellow).Add(color.FgBlack).Print(" WARN ")
+                fmt.Println(" " + s)
+                mut.Lock()
+                Warnings = append(Warnings, s)
+                mut.Unlock()
+        }
+        mut.Lock()
+        log.Println("[W]:    " + s)
+        mut.Unlock()
 }
 
 // Init sends the ClientFile to a client
