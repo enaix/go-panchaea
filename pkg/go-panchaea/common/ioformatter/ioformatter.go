@@ -35,7 +35,7 @@ func PrintErr(err string) {
 		Errors = append(Errors, err)
 		mut.Unlock()
 	} else {
-		color.New(color.BgRed).Add(color.FgWhite).Fprintf(os.Stderr, " ERROR ")
+		color.New(color.BgRed).Add(color.FgWhite).Fprintf(os.Stderr, " FAIL ")
 		fmt.Println(" " + err)
 		mut.Lock()
 		Errors = append(Errors, err)
@@ -50,7 +50,7 @@ func PrintSuccess(s string) {
 	if IsFormatted(s) {
 		color.Green(s)
 	} else {
-		color.New(color.BgGreen).Add(color.FgWhite).Print(" INFO ")
+		color.New(color.BgGreen).Add(color.FgBlack).Print(" INFO ")
 		fmt.Println(" " + s)
 	}
 	mut.Lock()
