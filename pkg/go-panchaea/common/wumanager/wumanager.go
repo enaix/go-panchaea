@@ -1,6 +1,8 @@
 package manager
 
 import (
+	iof "github.com/enaix/go-panchaea/common/ioformatter"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -85,4 +87,11 @@ func GetWorkUnit(thread *Thread) (*WorkUnit, bool) {
 		return &WorkUnit{}, false
 	}
 	return thread.WorkUnits[len(thread.WorkUnits)-1], true
+}
+
+func ReportError(err string, client *Client, thread *Thread, wu *WorkUnit) {
+	iof.PrintErr(strconv.Itoa(client.ID) + " " + err)
+	client.Status = "error"
+	thread.Status = "error"
+	wu.Status = "error"
 }
